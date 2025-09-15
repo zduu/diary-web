@@ -131,6 +131,25 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
     }
   }, [entry?.id, isOpen]); // 只依赖entry的id和isOpen状态
 
+  // 打开弹窗时锁定背景滚动，关闭时恢复
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalTouchAction = (document.body.style as any).touchAction;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    (document.body.style as any).touchAction = 'none';
+
+    return () => {
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      document.body.style.overflow = originalBodyOverflow;
+      (document.body.style as any).touchAction = originalTouchAction;
+    };
+  }, [isOpen]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
@@ -214,7 +233,8 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         padding: isMobile ? '8px' : '16px',
         boxSizing: 'border-box',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        overscrollBehavior: 'contain'
       }}
       onClick={(e) => {
         // 点击背景关闭弹窗
@@ -225,7 +245,7 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
     >
       <div
         className={`${isMobile ? 'rounded-lg' : 'rounded-xl'} shadow-2xl w-full ${isMobile ? 'max-w-full h-full' : 'max-w-4xl max-h-[90vh]'} overflow-y-auto ${theme.effects.blur}`}
-        style={{ backgroundColor: theme.colors.background }}
+        style={{ backgroundColor: theme.colors.background, overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
         onClick={(e) => {
           // 防止点击弹窗内容时关闭弹窗
           e.stopPropagation();

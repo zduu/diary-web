@@ -87,6 +87,10 @@ export function PasswordProtection({ onAuthenticated }: PasswordProtectionProps)
     await new Promise(resolve => setTimeout(resolve, 500));
 
     if (password === passwordSettings.password) {
+      // 记录已通过验证的状态，刷新后免输密码
+      try {
+        localStorage.setItem('diary-app-authenticated', 'true');
+      } catch {}
       onAuthenticated();
     } else {
       setError('密码错误，请重试');

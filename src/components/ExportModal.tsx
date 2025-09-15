@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Download, X, FileText, Database } from 'lucide-react';
 import { useThemeContext } from './ThemeProvider';
 import { DiaryEntry } from '../types';
@@ -14,6 +15,16 @@ export function ExportModal({ isOpen, onClose, entries, exportType }: ExportModa
   const { theme } = useThemeContext();
   const [exportFormat, setExportFormat] = useState<'json' | 'txt'>('json');
   const [includeHidden, setIncludeHidden] = useState(false);
+
+  // 锁定背景滚动，并确保弹窗固定在视口（始终调用 Hook，内部根据 isOpen 执行）
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -128,7 +139,7 @@ export function ExportModal({ isOpen, onClose, entries, exportType }: ExportModa
     return weatherLabels[weather] || weather;
   };
 
-  return (
+  const modalContent = (
     <div
       style={{
         position: 'fixed',
@@ -284,4 +295,7 @@ export function ExportModal({ isOpen, onClose, entries, exportType }: ExportModa
       </div>
     </div>
   );
+
+  // 使用 Portal 避免被父级 transform 影响，确保 position: fixed 以视口为参照
+  return createPortal(modalContent, document.body);
 }

@@ -36,16 +36,19 @@ function AppContent() {
   const [passwordProtectionEnabled, setPasswordProtectionEnabled] = useState<boolean | null>(null);
   const [searchResults, setSearchResults] = useState<DiaryEntry[] | null>(null);
   const [filterResults, setFilterResults] = useState<DiaryEntry[] | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('card');
+  const [viewMode, setViewMode] = useState<ViewMode>('timeline');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportType, setExportType] = useState<string>('全部日记');
   const [showStatsTest, setShowStatsTest] = useState(false);
 
-  // 从localStorage加载显示模式偏好
+  // 从localStorage加载显示模式偏好（无记录时默认到时间轴并写入localStorage）
   useEffect(() => {
-    const savedViewMode = localStorage.getItem('diary_view_mode') as ViewMode;
-    if (savedViewMode && (savedViewMode === 'card' || savedViewMode === 'timeline' || savedViewMode === 'archive')) {
-      setViewMode(savedViewMode);
+    const saved = localStorage.getItem('diary_view_mode') as ViewMode | null;
+    if (saved && (saved === 'card' || saved === 'timeline' || saved === 'archive')) {
+      setViewMode(saved);
+    } else {
+      setViewMode('timeline');
+      localStorage.setItem('diary_view_mode', 'timeline');
     }
   }, []);
 
@@ -70,6 +73,12 @@ function AppContent() {
         // 如果密码保护未启用，设置为已认证
         if (!isEnabled) {
           setIsAuthenticated(true);
+        } else {
+          // 如果启用了密码保护，但之前已验证过，则恢复登录状态
+          const previouslyAuthenticated = localStorage.getItem('diary-app-authenticated') === 'true';
+          if (previouslyAuthenticated) {
+            setIsAuthenticated(true);
+          }
         }
 
         // 根据欢迎页面设置决定是否显示欢迎页面
@@ -92,6 +101,12 @@ function AppContent() {
 
             if (!isEnabled) {
               setIsAuthenticated(true);
+            } else {
+              // 本地启用了密码保护时，也尝试恢复之前的验证状态
+              const previouslyAuthenticated = localStorage.getItem('diary-app-authenticated') === 'true';
+              if (previouslyAuthenticated) {
+                setIsAuthenticated(true);
+              }
             }
             // 默认启用欢迎页面（如果没有设置的话）
             setShowWelcomePage(true);
