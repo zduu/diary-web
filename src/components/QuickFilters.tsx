@@ -21,7 +21,11 @@ export function QuickFilters({ entries, onFilterResults, onClearFilter }: QuickF
   const [selectedMonth, setSelectedMonth] = useState('');
   const [isMobile, setIsMobile] = useState(false);
   const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
+  const [isYearDropdownOpen, setIsYearDropdownOpen] = useState(false);
+  const [isMonthDropdownOpen, setIsMonthDropdownOpen] = useState(false);
   const tagDropdownRef = useRef<HTMLDivElement>(null);
+  const yearDropdownRef = useRef<HTMLDivElement>(null);
+  const monthDropdownRef = useRef<HTMLDivElement>(null);
 
   // 检测是否为移动设备
   useEffect(() => {
@@ -34,12 +38,13 @@ export function QuickFilters({ entries, onFilterResults, onClearFilter }: QuickF
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // 点击外部关闭标签下拉框
+  // 点击外部关闭下拉框
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (tagDropdownRef.current && !tagDropdownRef.current.contains(event.target as Node)) {
-        setIsTagDropdownOpen(false);
-      }
+      const targetNode = event.target as Node;
+      if (tagDropdownRef.current && !tagDropdownRef.current.contains(targetNode)) setIsTagDropdownOpen(false);
+      if (yearDropdownRef.current && !yearDropdownRef.current.contains(targetNode)) setIsYearDropdownOpen(false);
+      if (monthDropdownRef.current && !monthDropdownRef.current.contains(targetNode)) setIsMonthDropdownOpen(false);
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -74,20 +79,20 @@ export function QuickFilters({ entries, onFilterResults, onClearFilter }: QuickF
     return Array.from(yearSet).sort((a, b) => parseInt(b) - parseInt(a));
   };
 
-  // 获取指定年份的所有月份
-  const getMonthsForYear = (year: string) => {
+  // 获取所有可用的月份（不依赖年份）
+  const getAllMonths = () => {
     const monthSet = new Set<string>();
     entries.forEach(entry => {
       if (!entry.hidden && entry.created_at) {
         const entryDate = new Date(normalizeTimeString(entry.created_at));
-        if (entryDate.getFullYear().toString() === year) {
-          const month = (entryDate.getMonth() + 1).toString().padStart(2, '0');
-          monthSet.add(month);
-        }
+        const month = (entryDate.getMonth() + 1).toString().padStart(2, '0');
+        monthSet.add(month);
       }
     });
     return Array.from(monthSet).sort((a, b) => parseInt(b) - parseInt(a));
   };
+
+  // 过去：按年份筛选月份的辅助函数已移除，月份列表不再依赖年份
 
   // 执行过滤
   const performFilter = (tags: string[], year: string, month: string) => {
@@ -328,68 +333,221 @@ export function QuickFilters({ entries, onFilterResults, onClearFilter }: QuickF
         </div>
 
         {/* 年份过滤 */}
-        <div className="space-y-2">
+        <div className="space-y-2" ref={yearDropdownRef}>
           <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-medium flex items-center gap-2`} style={{ color: theme.colors.text }}>
             <Calendar className="w-4 h-4" />
             年份
           </label>
-          <select
-            value={selectedYear}
-            onChange={(e) => {
-              setSelectedYear(e.target.value);
-              setSelectedMonth(''); // 清空月份选择
-            }}
-            className={`w-full ${isMobile ? 'px-2 py-1.5 text-sm' : 'px-3 py-2'} rounded border focus:outline-none focus:ring-2 transition-all`}
-            style={{
-              backgroundColor: theme.mode === 'glass'
-                ? 'rgba(71, 85, 105, 0.7)'
-                : theme.colors.surface,
-              borderColor: theme.mode === 'glass'
-                ? 'rgba(99, 102, 241, 0.4)'
-                : theme.colors.border,
-              color: theme.mode === 'glass' ? 'white' : theme.colors.text,
-              textShadow: theme.mode === 'glass' ? '0 1px 2px rgba(0, 0, 0, 0.5)' : 'none',
-              backdropFilter: theme.mode === 'glass' ? 'blur(10px)' : 'none',
-              '--tw-ring-color': theme.colors.primary,
-            } as React.CSSProperties}
-          >
-            <option value="">所有年份</option>
-            {getAllYears().map(year => (
-              <option key={year} value={year}>{year}年</option>
-            ))}
-          </select>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setIsYearDropdownOpen(!isYearDropdownOpen);
+                setIsTagDropdownOpen(false);
+                setIsMonthDropdownOpen(false);
+              }}
+              className={`w-full ${isMobile ? 'px-2 py-1.5 text-sm' : 'px-3 py-2'} rounded border focus:outline-none focus:ring-2 transition-all text-left flex items-center justify-between`}
+              style={{
+                backgroundColor: theme.mode === 'glass'
+                  ? 'rgba(71, 85, 105, 0.7)'
+                  : theme.colors.surface,
+                borderColor: theme.mode === 'glass'
+                  ? 'rgba(99, 102, 241, 0.4)'
+                  : theme.colors.border,
+                color: theme.mode === 'glass' ? 'white' : theme.colors.text,
+                textShadow: theme.mode === 'glass' ? '0 1px 2px rgba(0, 0, 0, 0.5)' : 'none',
+                backdropFilter: theme.mode === 'glass' ? 'blur(10px)' : 'none',
+                '--tw-ring-color': theme.colors.primary,
+              } as React.CSSProperties}
+            >
+              <span className="truncate">
+                {selectedYear ? `${selectedYear}年` : '所有年份'}
+              </span>
+              <ChevronDown className={`w-4 h-4 transition-transform ${isYearDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isYearDropdownOpen && (
+              <div
+                className="absolute z-50 w-full mt-1 rounded border shadow-lg max-h-60 overflow-y-auto"
+                style={{
+                  backgroundColor: theme.mode === 'glass'
+                    ? 'rgba(99, 102, 241, 0.25)'
+                    : theme.colors.surface,
+                  borderColor: theme.mode === 'glass'
+                    ? 'rgba(99, 102, 241, 0.5)'
+                    : theme.colors.border,
+                  backdropFilter: theme.mode === 'glass' ? 'blur(20px)' : 'none',
+                  boxShadow: theme.mode === 'glass' ? '0 8px 32px rgba(0, 0, 0, 0.3), 0 0 15px rgba(99, 102, 241, 0.3)' : 'none',
+                }}
+              >
+                {/* 清除年份 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedYear('');
+                    setIsYearDropdownOpen(false);
+                  }}
+                  className={`w-full px-3 py-2 text-left hover:bg-opacity-80 transition-colors flex items-center justify-between ${isMobile ? 'text-sm' : ''}`}
+                  style={{
+                    backgroundColor: !selectedYear
+                      ? (theme.mode === 'glass' ? 'rgba(255, 255, 255, 0.2)' : `${theme.colors.primary}20`)
+                      : 'transparent',
+                    color: theme.mode === 'glass' ? '#ffffff' : theme.colors.text,
+                    textShadow: theme.mode === 'glass' ? '0 1px 2px rgba(0, 0, 0, 0.5)' : 'none',
+                  }}
+                >
+                  <span>所有年份</span>
+                  {!selectedYear && (
+                    <div
+                      className="w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                      style={{ backgroundColor: theme.colors.primary }}
+                    >
+                      ✓
+                    </div>
+                  )}
+                </button>
+
+                {/* 年份选项 */}
+                {getAllYears().map(year => (
+                  <button
+                    key={year}
+                    type="button"
+                    onClick={() => {
+                      setSelectedYear(year);
+                      setIsYearDropdownOpen(false);
+                    }}
+                    className={`w-full px-3 py-2 text-left hover:bg-opacity-80 transition-colors flex items-center justify-between ${isMobile ? 'text-sm' : ''}`}
+                    style={{
+                      backgroundColor: selectedYear === year
+                        ? (theme.mode === 'glass' ? 'rgba(255, 255, 255, 0.2)' : `${theme.colors.primary}20`)
+                        : 'transparent',
+                      color: theme.mode === 'glass' ? '#ffffff' : theme.colors.text,
+                      textShadow: theme.mode === 'glass' ? '0 1px 2px rgba(0, 0, 0, 0.5)' : 'none',
+                    }}
+                  >
+                    <span>{year}年</span>
+                    {selectedYear === year && (
+                      <div
+                        className="w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                        style={{ backgroundColor: theme.colors.primary }}
+                      >
+                        ✓
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 月份过滤 */}
-        <div className="space-y-2">
-          <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-medium`} style={{ color: theme.colors.text }}>
+        <div className="space-y-2" ref={monthDropdownRef}>
+          <label className={`${isMobile ? 'text-xs' : 'text-sm'} font-medium flex items-center gap-2`} style={{ color: theme.colors.text }}>
+            <Calendar className="w-4 h-4" />
             月份
           </label>
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            disabled={!selectedYear}
-            className={`w-full ${isMobile ? 'px-2 py-1.5 text-sm' : 'px-3 py-2'} rounded border focus:outline-none focus:ring-2 transition-all ${!selectedYear ? 'opacity-50 cursor-not-allowed' : ''}`}
-            style={{
-              backgroundColor: theme.mode === 'glass'
-                ? 'rgba(71, 85, 105, 0.7)'
-                : theme.colors.surface,
-              borderColor: theme.mode === 'glass'
-                ? 'rgba(99, 102, 241, 0.4)'
-                : theme.colors.border,
-              color: theme.mode === 'glass' ? 'white' : theme.colors.text,
-              textShadow: theme.mode === 'glass' ? '0 1px 2px rgba(0, 0, 0, 0.5)' : 'none',
-              backdropFilter: theme.mode === 'glass' ? 'blur(10px)' : 'none',
-              '--tw-ring-color': theme.colors.primary,
-            } as React.CSSProperties}
-          >
-            <option value="">{selectedYear ? '所有月份' : '请先选择年份'}</option>
-            {selectedYear && getMonthsForYear(selectedYear).map(month => (
-              <option key={month} value={month}>
-                {parseInt(month)}月
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setIsMonthDropdownOpen(!isMonthDropdownOpen);
+                setIsTagDropdownOpen(false);
+                setIsYearDropdownOpen(false);
+              }}
+              className={`w-full ${isMobile ? 'px-2 py-1.5 text-sm' : 'px-3 py-2'} rounded border focus:outline-none focus:ring-2 transition-all text-left flex items-center justify-between`}
+              style={{
+                backgroundColor: theme.mode === 'glass'
+                  ? 'rgba(71, 85, 105, 0.7)'
+                  : theme.colors.surface,
+                borderColor: theme.mode === 'glass'
+                  ? 'rgba(99, 102, 241, 0.4)'
+                  : theme.colors.border,
+                color: theme.mode === 'glass' ? 'white' : theme.colors.text,
+                textShadow: theme.mode === 'glass' ? '0 1px 2px rgba(0, 0, 0, 0.5)' : 'none',
+                backdropFilter: theme.mode === 'glass' ? 'blur(10px)' : 'none',
+                '--tw-ring-color': theme.colors.primary,
+              } as React.CSSProperties}
+            >
+              <span className="truncate">
+                {selectedMonth ? `${parseInt(selectedMonth)}月` : '所有月份'}
+              </span>
+              <ChevronDown className={`w-4 h-4 transition-transform ${isMonthDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isMonthDropdownOpen && (
+              <div
+                className="absolute z-50 w-full mt-1 rounded border shadow-lg max-h-60 overflow-y-auto"
+                style={{
+                  backgroundColor: theme.mode === 'glass'
+                    ? 'rgba(99, 102, 241, 0.25)'
+                    : theme.colors.surface,
+                  borderColor: theme.mode === 'glass'
+                    ? 'rgba(99, 102, 241, 0.5)'
+                    : theme.colors.border,
+                  backdropFilter: theme.mode === 'glass' ? 'blur(20px)' : 'none',
+                  boxShadow: theme.mode === 'glass' ? '0 8px 32px rgba(0, 0, 0, 0.3), 0 0 15px rgba(99, 102, 241, 0.3)' : 'none',
+                }}
+              >
+                {/* 清除月份 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMonth('');
+                    setIsMonthDropdownOpen(false);
+                  }}
+                  className={`w-full px-3 py-2 text-left hover:bg-opacity-80 transition-colors flex items-center justify-between ${isMobile ? 'text-sm' : ''}`}
+                  style={{
+                    backgroundColor: !selectedMonth
+                      ? (theme.mode === 'glass' ? 'rgba(255, 255, 255, 0.2)' : `${theme.colors.primary}20`)
+                      : 'transparent',
+                    color: theme.mode === 'glass' ? '#ffffff' : theme.colors.text,
+                    textShadow: theme.mode === 'glass' ? '0 1px 2px rgba(0, 0, 0, 0.5)' : 'none',
+                  }}
+                >
+                  <span>所有月份</span>
+                  {!selectedMonth && (
+                    <div
+                      className="w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                      style={{ backgroundColor: theme.colors.primary }}
+                    >
+                      ✓
+                    </div>
+                  )}
+                </button>
+
+                {/* 月份选项 */}
+                {getAllMonths().map(month => (
+                  <button
+                    key={month}
+                    type="button"
+                    onClick={() => {
+                      setSelectedMonth(month);
+                      setIsMonthDropdownOpen(false);
+                    }}
+                    className={`w-full px-3 py-2 text-left hover:bg-opacity-80 transition-colors flex items-center justify-between ${isMobile ? 'text-sm' : ''}`}
+                    style={{
+                      backgroundColor: selectedMonth === month
+                        ? (theme.mode === 'glass' ? 'rgba(255, 255, 255, 0.2)' : `${theme.colors.primary}20`)
+                        : 'transparent',
+                      color: theme.mode === 'glass' ? '#ffffff' : theme.colors.text,
+                      textShadow: theme.mode === 'glass' ? '0 1px 2px rgba(0, 0, 0, 0.5)' : 'none',
+                    }}
+                  >
+                    <span>{parseInt(month)}月</span>
+                    {selectedMonth === month && (
+                      <div
+                        className="w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                        style={{ backgroundColor: theme.colors.primary }}
+                      >
+                        ✓
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -442,12 +600,36 @@ export function QuickFilters({ entries, onFilterResults, onClearFilter }: QuickF
               }}
             >
               <Calendar className="w-3 h-3" />
-              {selectedYear}年{selectedMonth && `${parseInt(selectedMonth)}月`}
+              {selectedYear}年
               <button
-                onClick={() => {
-                  setSelectedYear('');
-                  setSelectedMonth('');
-                }}
+                onClick={() => setSelectedYear('')}
+                className="hover:opacity-80 transition-opacity"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {selectedMonth && (
+            <span
+              className={`flex items-center gap-1 ${isMobile ? 'text-xs px-2 py-1' : 'text-sm px-3 py-1'} rounded-full`}
+              style={{
+                backgroundColor: theme.mode === 'glass'
+                  ? 'rgba(99, 102, 241, 0.4)'
+                  : `${theme.colors.primary}20`,
+                color: theme.mode === 'glass'
+                  ? '#ffffff'
+                  : theme.colors.primary,
+                border: theme.mode === 'glass'
+                  ? '1px solid rgba(99, 102, 241, 0.6)'
+                  : `1px solid ${theme.colors.primary}40`,
+                textShadow: theme.mode === 'glass' ? '0 1px 2px rgba(0, 0, 0, 0.6)' : 'none',
+                backdropFilter: theme.mode === 'glass' ? 'blur(10px)' : 'none'
+              }}
+            >
+              <Calendar className="w-3 h-3" />
+              {parseInt(selectedMonth)}月
+              <button
+                onClick={() => setSelectedMonth('')}
                 className="hover:opacity-80 transition-opacity"
               >
                 <X className="w-3 h-3" />
