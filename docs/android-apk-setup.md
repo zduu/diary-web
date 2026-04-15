@@ -14,7 +14,7 @@
 - Node.js 与 npm
 - Android Studio
 - Android SDK
-- Java 17 或 Android Studio 推荐版本
+- Java 21 或 Android Studio 推荐版本
 
 ## 首次准备
 
