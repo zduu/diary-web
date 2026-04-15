@@ -36,6 +36,21 @@ const sampleEntries: DiaryEntry[] = [
 ];
 
 describe('recommendationUtils', () => {
+  it('hides recommendations when there is only one readable entry', () => {
+    const recommendations = getEntryRecommendations([
+      {
+        id: 9,
+        title: '只有一篇',
+        content: '单条内容不需要再重复推荐。',
+        hidden: false,
+        created_at: '2026-04-12T10:00:00.000Z',
+        updated_at: '2026-04-12T10:00:00.000Z',
+      },
+    ]);
+
+    expect(recommendations).toEqual([]);
+  });
+
   it('builds lightweight recommendations from recent, seasonal and scene signals', () => {
     const recommendations = getEntryRecommendations(sampleEntries, new Date('2026-04-15T08:00:00.000Z'));
 

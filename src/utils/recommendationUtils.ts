@@ -156,7 +156,7 @@ function buildArchiveRecommendation(entry: DiaryEntry): EntryRecommendation {
 
 export function getEntryRecommendations(entries: DiaryEntry[], now = new Date()): EntryRecommendation[] {
   const sortedEntries = sortEntries(entries);
-  if (sortedEntries.length === 0) {
+  if (sortedEntries.length < 2) {
     return [];
   }
 
