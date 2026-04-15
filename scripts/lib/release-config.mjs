@@ -32,13 +32,34 @@ export function assertIncludes(content, fragment, message, errors) {
   }
 }
 
+function stripTomlInlineComment(line) {
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+
+    if (character === '"' && !escaped) {
+      inString = !inString;
+    }
+
+    if (character === '#' && !inString) {
+      return line.slice(0, index).trimEnd();
+    }
+
+    escaped = character === '\\' && !escaped;
+    if (character !== '\\') {
+      escaped = false;
+    }
+  }
+
+  return line;
+}
+
 export function stripTomlComments(content) {
   return content
     .split('\n')
-    .map((line) => {
-      const trimmed = line.trimStart();
-      return trimmed.startsWith('#') ? '' : line;
-    })
+    .map((line) => stripTomlInlineComment(line))
     .join('\n');
 }
 
@@ -70,12 +91,11 @@ function extractTomlString(content, key, section = null) {
   return null;
 }
 
-export async function loadWranglerReleaseConfig() {
-  const wranglerContent = await readRootText('wrangler.toml');
-  const activeWranglerContent = stripTomlComments(wranglerContent);
+export function parseWranglerReleaseConfig(content) {
+  const activeWranglerContent = stripTomlComments(content);
 
   return {
-    raw: wranglerContent,
+    raw: content,
     active: activeWranglerContent,
     projectName: extractTomlString(activeWranglerContent, 'name'),
     pagesBuildOutputDir: extractTomlString(activeWranglerContent, 'pages_build_output_dir'),
@@ -86,4 +106,9 @@ export async function loadWranglerReleaseConfig() {
     appTimezone: extractTomlString(activeWranglerContent, 'APP_TIMEZONE', '[vars]'),
     imagesVariant: extractTomlString(activeWranglerContent, 'IMAGES_VARIANT', '[vars]'),
   };
+}
+
+export async function loadWranglerReleaseConfig() {
+  const wranglerContent = await readRootText('wrangler.toml');
+  return parseWranglerReleaseConfig(wranglerContent);
 }
