@@ -13,7 +13,10 @@ const requiredFiles = [
   'docs/production-checklist.md',
   'docs/release-master-cutover.md',
   'docs/security-migration.md',
+  'public/apple-touch-icon.png',
   'public/favicon.svg',
+  'public/icon-192.png',
+  'public/icon-512.png',
   'public/manifest.webmanifest',
   'public/sw.js',
 ];
@@ -59,13 +62,19 @@ assertIncludes(readmeContent, 'docs/stats-api.md', 'README.md 未链接统计接
 const indexHtmlContent = await readRootText('index.html');
 assertIncludes(indexHtmlContent, 'href="/manifest.webmanifest"', 'index.html 未引用 manifest.webmanifest', errors);
 assertIncludes(indexHtmlContent, 'href="/favicon.svg"', 'index.html 未引用 favicon.svg', errors);
+assertIncludes(indexHtmlContent, 'href="/apple-touch-icon.png"', 'index.html 未引用 apple-touch-icon.png', errors);
 
 const manifestContent = await readRootText('public/manifest.webmanifest');
 assertIncludes(manifestContent, '"display": "standalone"', 'manifest.webmanifest 未声明 standalone 显示模式', errors);
+assertIncludes(manifestContent, '"/icon-192.png"', 'manifest.webmanifest 未引用 192 PNG 图标', errors);
+assertIncludes(manifestContent, '"/icon-512.png"', 'manifest.webmanifest 未引用 512 PNG 图标', errors);
 assertIncludes(manifestContent, '"/favicon.svg"', 'manifest.webmanifest 未引用 favicon.svg', errors);
 
 const serviceWorkerContent = await readRootText('public/sw.js');
 assertIncludes(serviceWorkerContent, "self.addEventListener('fetch'", 'sw.js 缺少 fetch 缓存逻辑', errors);
+assertIncludes(serviceWorkerContent, "'/apple-touch-icon.png'", 'sw.js 未预缓存 apple-touch-icon.png', errors);
+assertIncludes(serviceWorkerContent, "'/icon-192.png'", 'sw.js 未预缓存 icon-192.png', errors);
+assertIncludes(serviceWorkerContent, "'/icon-512.png'", 'sw.js 未预缓存 icon-512.png', errors);
 
 const mainEntryContent = await readRootText('src/main.tsx');
 assertIncludes(

@@ -40,7 +40,7 @@
 - 移动端输入、定位、滚动恢复正常。
 - 生产环境浏览器控制台无新增未处理报错；定位/地图类诊断日志仅在开发环境输出。
 - `GET /api/stats` 已按预期鉴权并返回数据。
-- `favicon.svg` 与 `manifest.webmanifest` 可访问，独立窗口模式入口正常。
+- `favicon.svg`、`apple-touch-icon.png`、`icon-192.png`、`icon-512.png` 与 `manifest.webmanifest` 可访问，独立窗口模式入口正常。
 - `sw.js` 可访问且成功注册，断网时仍可打开应用壳层与最近公开内容快照。
 - 非 standalone 状态下，设备与离线卡片能显示浏览器安装按钮或“添加到主屏幕”提示。
 - 浏览器响应头已生效：`Content-Security-Policy`、`Strict-Transport-Security`、`X-Content-Type-Options`。

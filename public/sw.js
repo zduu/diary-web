@@ -1,5 +1,12 @@
 const CACHE_NAME = 'diary-shell-v1';
-const STATIC_ASSETS = ['/', '/manifest.webmanifest', '/favicon.svg'];
+const STATIC_ASSETS = [
+  '/',
+  '/manifest.webmanifest',
+  '/favicon.svg',
+  '/apple-touch-icon.png',
+  '/icon-192.png',
+  '/icon-512.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

@@ -25,7 +25,7 @@
 ## 3. 上线向 UI 基线
 
 - `index.html` 维护应用描述、`og` 元信息、`color-scheme` 和 PWA 所需基础标签。
-- `public/manifest.webmanifest` 维护独立窗口模式、分类、方向和主题色。
+- `public/manifest.webmanifest` 维护独立窗口模式、分类、主题色和可安装图标；`index.html` 还需保留 `apple-touch-icon`，避免 iOS 安装时回退到缺省图标。
 - `public/sw.js` 维护应用壳层缓存策略；只缓存静态资源，不缓存 `/api/*`。
 - `src/index.css` 统一提供 `skip-link`、全局焦点样式和 `prefers-reduced-motion` 兜底，保证键盘导航和低动态偏好可用。
 

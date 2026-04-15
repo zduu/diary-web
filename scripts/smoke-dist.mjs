@@ -10,6 +10,7 @@ function getContentType(filePath) {
   if (filePath.endsWith('.js')) return 'application/javascript; charset=utf-8';
   if (filePath.endsWith('.css')) return 'text/css; charset=utf-8';
   if (filePath.endsWith('.svg')) return 'image/svg+xml';
+  if (filePath.endsWith('.png')) return 'image/png';
   if (filePath.endsWith('.webmanifest')) return 'application/manifest+json; charset=utf-8';
   if (filePath.endsWith('.json')) return 'application/json; charset=utf-8';
   return 'application/octet-stream';
@@ -75,11 +76,14 @@ try {
   assert(homeHtml.includes('<div id="root"></div>'), '首页缺少 root 挂载节点');
   assert(homeHtml.includes('/manifest.webmanifest'), '首页未引用 manifest.webmanifest');
   assert(homeHtml.includes('/favicon.svg'), '首页未引用 favicon.svg');
+  assert(homeHtml.includes('/apple-touch-icon.png'), '首页未引用 apple-touch-icon.png');
 
   const manifestResponse = await fetch(`${baseUrl}/manifest.webmanifest`);
   assert(manifestResponse.ok, 'manifest.webmanifest 访问失败');
   const manifest = await manifestResponse.json();
   assert(manifest.display === 'standalone', 'manifest.display 不是 standalone');
+  assert(manifest.icons?.some((icon) => icon.src === '/icon-192.png'), 'manifest 未包含 192 PNG 图标');
+  assert(manifest.icons?.some((icon) => icon.src === '/icon-512.png'), 'manifest 未包含 512 PNG 图标');
   assert(manifest.icons?.some((icon) => icon.src === '/favicon.svg'), 'manifest 未包含 favicon.svg 图标');
 
   const serviceWorkerResponse = await fetch(`${baseUrl}/sw.js`);
@@ -91,6 +95,15 @@ try {
   assert(faviconResponse.ok, 'favicon.svg 访问失败');
   const faviconContent = await faviconResponse.text();
   assert(faviconContent.includes('<svg'), 'favicon.svg 内容无效');
+
+  const appleTouchIconResponse = await fetch(`${baseUrl}/apple-touch-icon.png`);
+  assert(appleTouchIconResponse.ok, 'apple-touch-icon.png 访问失败');
+
+  const icon192Response = await fetch(`${baseUrl}/icon-192.png`);
+  assert(icon192Response.ok, 'icon-192.png 访问失败');
+
+  const icon512Response = await fetch(`${baseUrl}/icon-512.png`);
+  assert(icon512Response.ok, 'icon-512.png 访问失败');
 
   const assetUrls = collectAssetUrls(homeHtml);
   assert(assetUrls.length >= 2, '首页未找到关键静态资源引用');
