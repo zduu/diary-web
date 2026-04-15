@@ -19,7 +19,7 @@ export function AdminLoginView({
   theme,
   getTextColor,
 }: AdminLoginViewProps) {
-  const isDarkLike = theme.mode === 'glass' || theme.mode === 'dark';
+  const isDarkLike = theme.mode === 'dark';
 
   return (
     <div className="max-w-md mx-auto">
@@ -42,11 +42,7 @@ export function AdminLoginView({
           className="rounded-lg border p-1"
           style={{
             backgroundColor: isDarkLike ? 'rgba(15, 23, 42, 0.8)' : theme.colors.surface,
-            borderColor: theme.mode === 'glass'
-              ? 'rgba(99, 102, 241, 0.3)'
-              : theme.mode === 'dark'
-                ? 'rgba(51, 65, 85, 0.5)'
-                : theme.colors.border,
+            borderColor: theme.mode === 'dark' ? 'rgba(99, 102, 241, 0.3)' : theme.colors.border,
           }}
         >
           <IconTextInput

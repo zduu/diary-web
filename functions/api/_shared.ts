@@ -43,7 +43,8 @@ export type SessionInfo = {
 const textEncoder = new TextEncoder();
 const SESSION_COOKIE_NAME = 'diary_session';
 const PASSWORD_HASH_PREFIX = 'pbkdf2';
-const PASSWORD_HASH_ITERATIONS = 150000;
+const PASSWORD_HASH_ITERATIONS = 100000;
+const MAX_SUPPORTED_PASSWORD_HASH_ITERATIONS = 100000;
 const MAX_TITLE_LENGTH = 200;
 const MAX_CONTENT_LENGTH = 50000;
 const MAX_MOOD_LENGTH = 50;
@@ -324,6 +325,12 @@ async function verifyPasswordHash(storedHash: string, password: string): Promise
     return false;
   }
 
+  if (iterations < 1 || iterations > MAX_SUPPORTED_PASSWORD_HASH_ITERATIONS) {
+    throw new Error(
+      `当前部署环境不支持该密码哈希参数，请重置密码后重试（支持的最大 PBKDF2 迭代次数为 ${MAX_SUPPORTED_PASSWORD_HASH_ITERATIONS}）`
+    );
+  }
+
   const actualHash = await derivePasswordHash(password, salt, iterations);
   return timingSafeEqual(actualHash, expectedHash);
 }
@@ -399,7 +406,20 @@ export async function verifyPasswordForScope(
   ]);
 
   if (hashValue) {
-    return verifyPasswordHash(hashValue, candidate);
+    try {
+      return await verifyPasswordHash(hashValue, candidate);
+    } catch (error) {
+      if (
+        error instanceof Error
+        && config.bootstrapPassword?.trim()
+        && timingSafeEqual(config.bootstrapPassword, candidate)
+      ) {
+        await setPasswordForScope(db, scope, candidate);
+        return true;
+      }
+
+      throw error;
+    }
   }
 
   if (legacyValue) {

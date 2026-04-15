@@ -27,7 +27,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
   };
 
   const mutedBlockStyle: CSSProperties = {
-    backgroundColor: theme.mode === 'glass' ? 'rgba(148, 163, 184, 0.12)' : theme.colors.surface,
+    backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.12)' : theme.colors.surface,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: '18px',
   };
@@ -136,7 +136,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
                     fontSize: '0.9em',
                     padding: '0.18rem 0.42rem',
                     borderRadius: '8px',
-                    backgroundColor: theme.mode === 'glass' ? 'rgba(148, 163, 184, 0.16)' : `${theme.colors.primary}14`,
+                    backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.16)' : `${theme.colors.primary}14`,
                     color: theme.colors.primary,
                   }}
                   {...props}

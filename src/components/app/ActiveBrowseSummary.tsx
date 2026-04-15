@@ -104,7 +104,7 @@ export function ActiveBrowseSummary({
               style={{
                 ...mutedSurfaceStyle,
                 backgroundColor:
-                  theme.mode === 'glass' ? 'rgba(148, 163, 184, 0.12)' : 'rgba(255, 255, 255, 0.72)',
+                  theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.12)' : 'rgba(255, 255, 255, 0.72)',
                 color: theme.colors.textSecondary,
               }}
             >
@@ -118,7 +118,7 @@ export function ActiveBrowseSummary({
               style={{
                 ...mutedSurfaceStyle,
                 backgroundColor:
-                  theme.mode === 'glass' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.56)',
+                  theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.56)',
                 color: theme.colors.textSecondary,
               }}
             >

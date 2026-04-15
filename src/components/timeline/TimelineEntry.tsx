@@ -63,9 +63,9 @@ export function TimelineEntry({
       <div
         className={`absolute ${isMobile ? 'left-3.5 h-4 w-4' : 'left-6 h-6 w-6'} top-0 z-10 rounded-full border-2 shadow-lg`}
         style={{
-          backgroundColor: theme.mode === 'glass' ? 'rgba(10, 18, 28, 0.9)' : theme.colors.surface,
-          borderColor: theme.mode === 'glass' ? theme.colors.accent : theme.colors.primary,
-          boxShadow: theme.mode === 'glass'
+          backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.9)' : theme.colors.surface,
+          borderColor: theme.mode === 'dark' ? theme.colors.accent : theme.colors.primary,
+          boxShadow: theme.mode === 'dark'
             ? '0 4px 8px rgba(125, 211, 252, 0.24)'
             : `0 4px 8px ${theme.colors.primary}40`,
         }}
@@ -76,12 +76,12 @@ export function TimelineEntry({
         className={`${isMobile ? 'ml-10' : 'ml-16'} relative transition-all duration-500 ${isMobile ? 'pb-8' : 'pb-12'} ${isHighlighted ? 'ring-highlight rounded-[1.4rem] px-4 pt-3' : ''}`}
         style={{
           backgroundColor: isHighlighted
-            ? theme.mode === 'glass'
+            ? theme.mode === 'dark'
               ? 'rgba(148, 163, 184, 0.08)'
               : `${theme.colors.primary}08`
             : 'transparent',
           borderBottom: index < totalEntries - 1
-            ? `1px solid ${theme.mode === 'glass' ? 'rgba(255, 255, 255, 0.1)' : theme.colors.border}20`
+            ? `1px solid ${theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : theme.colors.border}20`
             : 'none',
           boxShadow: isHighlighted ? `0 0 0 2px ${theme.colors.primary}20` : 'none',
         }}
@@ -90,7 +90,7 @@ export function TimelineEntry({
           <div
             className={`flex items-center gap-2 font-medium ${isMobile ? 'text-sm' : 'text-base'}`}
             style={{
-              color: theme.mode === 'glass' ? theme.colors.text : theme.colors.primary,
+              color: theme.mode === 'dark' ? theme.colors.text : theme.colors.primary,
             }}
           >
             <Clock className={isMobile ? 'h-4 w-4' : 'h-5 w-5'} />

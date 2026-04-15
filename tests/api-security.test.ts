@@ -408,7 +408,7 @@ test('admin login migrates legacy plaintext password to hashed storage', async (
   assert.equal(body.data.isAdminAuthenticated, true);
 
   const db = env.DB as unknown as MockD1Database;
-  assert.ok(db.settings.get('admin_password_hash')?.startsWith('pbkdf2$150000$'));
+  assert.ok(db.settings.get('admin_password_hash')?.startsWith('pbkdf2$100000$'));
   assert.equal(db.settings.has('admin_password'), false);
 
   const sessionResponse = await getSession({

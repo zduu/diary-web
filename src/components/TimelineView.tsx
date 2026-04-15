@@ -80,7 +80,7 @@ export function TimelineView({ entries, onEdit, onPreview, searchQuery = '', hig
       <div
         className={`absolute ${isMobile ? 'bottom-0 left-5 top-0' : 'bottom-0 left-8 top-0'} w-0.5`}
         style={{
-          backgroundColor: theme.mode === 'glass'
+          backgroundColor: theme.mode === 'dark'
             ? 'rgba(226, 232, 240, 0.24)'
             : `${theme.colors.primary}40`
         }}

@@ -18,11 +18,11 @@ export function TimelineTimeDivider({
       <div
         className={`flex items-center gap-2 rounded-full ${isMobile ? 'px-2.5 py-1 text-xs' : 'px-3 py-1.5 text-sm'}`}
         style={{
-          backgroundColor: theme.mode === 'glass'
+          backgroundColor: theme.mode === 'dark'
             ? 'rgba(255, 255, 255, 0.1)'
             : theme.colors.surface,
-          border: `1px solid ${theme.mode === 'glass' ? 'rgba(255, 255, 255, 0.2)' : theme.colors.border}`,
-          color: theme.mode === 'glass' ? 'rgba(255, 255, 255, 0.8)' : theme.colors.textSecondary,
+          border: `1px solid ${theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.2)' : theme.colors.border}`,
+          color: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.8)' : theme.colors.textSecondary,
         }}
       >
         <Clock className="h-3 w-3" />

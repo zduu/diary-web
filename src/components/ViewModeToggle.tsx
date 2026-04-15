@@ -32,7 +32,7 @@ export function ViewModeToggle({
     ? VIEW_MODE_OPTIONS
     : VIEW_MODE_OPTIONS.filter((option) => option.mode !== 'archive');
   const wrapperStyle: CSSProperties = {
-    backgroundColor: theme.mode === 'glass' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.48)',
+    backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.48)',
     border: `1px solid ${theme.colors.border}`,
   };
 

@@ -47,9 +47,9 @@ export function ArchiveGroupHeader({
   theme,
   onToggle,
 }: ArchiveGroupHeaderProps) {
-  const titleColor = theme.mode === 'glass' ? 'white' : theme.colors.text;
-  const mutedColor = theme.mode === 'glass' ? 'rgba(255, 255, 255, 0.7)' : theme.colors.textSecondary;
-  const dividerColor = theme.mode === 'glass' ? 'rgba(255, 255, 255, 0.2)' : theme.colors.border;
+  const titleColor = theme.mode === 'dark' ? 'white' : theme.colors.text;
+  const mutedColor = theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.7)' : theme.colors.textSecondary;
+  const dividerColor = theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.2)' : theme.colors.border;
   const titleClassName = isMobile ? 'text-lg' : 'text-xl';
 
   switch (headerStyle) {

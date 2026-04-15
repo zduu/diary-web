@@ -31,28 +31,28 @@ interface ActiveFilterChipProps {
 
 function getTriggerStyle(theme: ThemeConfig): CSSProperties {
   return {
-    backgroundColor: theme.mode === 'glass' ? 'rgba(10, 18, 28, 0.56)' : theme.colors.surface,
+    backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.56)' : theme.colors.surface,
     borderColor: theme.colors.border,
     color: theme.colors.text,
     textShadow: 'none',
-    backdropFilter: theme.mode === 'glass' ? 'blur(12px)' : 'none',
+    backdropFilter: theme.mode === 'dark' ? 'blur(12px)' : 'none',
     '--tw-ring-color': theme.colors.primary,
   } as CSSProperties;
 }
 
 function getMenuStyle(theme: ThemeConfig): CSSProperties {
   return {
-    backgroundColor: theme.mode === 'glass' ? 'rgba(10, 18, 28, 0.82)' : theme.colors.surface,
+    backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.82)' : theme.colors.surface,
     borderColor: theme.colors.border,
-    backdropFilter: theme.mode === 'glass' ? 'blur(20px)' : 'none',
-    boxShadow: theme.mode === 'glass' ? '0 18px 40px rgba(4, 10, 18, 0.22)' : '0 14px 32px rgba(15, 23, 42, 0.08)',
+    backdropFilter: theme.mode === 'dark' ? 'blur(20px)' : 'none',
+    boxShadow: theme.mode === 'dark' ? '0 18px 40px rgba(4, 10, 18, 0.22)' : '0 14px 32px rgba(15, 23, 42, 0.08)',
   };
 }
 
 function getOptionStyle(theme: ThemeConfig, selected: boolean): CSSProperties {
   return {
     backgroundColor: selected
-      ? (theme.mode === 'glass' ? 'rgba(148, 163, 184, 0.18)' : `${theme.colors.primary}20`)
+      ? (theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.18)' : `${theme.colors.primary}20`)
       : 'transparent',
     color: theme.colors.text,
     textShadow: 'none',
@@ -61,11 +61,11 @@ function getOptionStyle(theme: ThemeConfig, selected: boolean): CSSProperties {
 
 function getChipStyle(theme: ThemeConfig): CSSProperties {
   return {
-    backgroundColor: theme.mode === 'glass' ? 'rgba(148, 163, 184, 0.16)' : `${theme.colors.primary}16`,
-    color: theme.mode === 'glass' ? theme.colors.text : theme.colors.primary,
-    border: `1px solid ${theme.mode === 'glass' ? theme.colors.border : `${theme.colors.primary}30`}`,
+    backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.16)' : `${theme.colors.primary}16`,
+    color: theme.mode === 'dark' ? theme.colors.text : theme.colors.primary,
+    border: `1px solid ${theme.mode === 'dark' ? theme.colors.border : `${theme.colors.primary}30`}`,
     textShadow: 'none',
-    backdropFilter: theme.mode === 'glass' ? 'blur(10px)' : 'none',
+    backdropFilter: theme.mode === 'dark' ? 'blur(10px)' : 'none',
   };
 }
 

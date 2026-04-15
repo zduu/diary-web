@@ -116,21 +116,6 @@ body.display-standalone {
 }
 
 .theme-dark {
-  --color-primary: #7dd3fc;
-  --color-secondary: #94a3b8;
-  --color-background: #0f1720;
-  --color-surface: #16202b;
-  --color-text: #e6edf5;
-  --color-textSecondary: #9aa7b6;
-  --color-border: #2b394b;
-  --color-accent: #f59e0b;
-  background:
-    radial-gradient(circle at top left, rgba(125, 211, 252, 0.09), transparent 24%),
-    radial-gradient(circle at bottom right, rgba(245, 158, 11, 0.08), transparent 20%),
-    #0f1720;
-}
-
-.theme-glass {
   --color-primary: #a5d8ff;
   --color-secondary: #cbd5e1;
   --color-background: transparent;
@@ -147,7 +132,7 @@ body.display-standalone {
   overflow-x: hidden;
 }
 
-.theme-glass::before {
+.theme-dark::before {
   content: '';
   position: fixed;
   inset: 0;
@@ -159,8 +144,7 @@ body.display-standalone {
 }
 
 .theme-light,
-.theme-dark,
-.theme-glass {
+.theme-dark {
   min-height: 100vh;
 }
 
@@ -203,8 +187,7 @@ body.display-standalone {
   background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.14), transparent);
 }
 
-.theme-dark .diary-card::after,
-.theme-glass .diary-card::after {
+.theme-dark .diary-card::after {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
 }
 
@@ -248,7 +231,7 @@ body.display-standalone {
   color: inherit;
 }
 
-.theme-glass .search-highlight {
+.theme-dark .search-highlight {
   background: rgba(125, 211, 252, 0.24);
 }
 
@@ -261,22 +244,22 @@ body.display-standalone {
   font-family: inherit;
 }
 
-.theme-glass .app-header,
-.theme-glass .welcome-panel,
-.theme-glass .diary-card,
-.theme-glass .location-detail-modal > div {
+.theme-dark .app-header,
+.theme-dark .welcome-panel,
+.theme-dark .diary-card,
+.theme-dark .location-detail-modal > div {
   background: rgba(10, 18, 28, 0.62) !important;
   border: 1px solid rgba(148, 163, 184, 0.24) !important;
   box-shadow: 0 22px 48px rgba(4, 10, 18, 0.22) !important;
 }
 
-.theme-glass .primary-button {
+.theme-dark .primary-button {
   box-shadow: 0 16px 36px rgba(37, 99, 235, 0.18) !important;
 }
 
-.theme-glass .app-header button,
-.theme-glass .welcome-page button,
-.theme-glass .diary-card button {
+.theme-dark .app-header button,
+.theme-dark .welcome-page button,
+.theme-dark .diary-card button {
   text-shadow: none !important;
 }
 
@@ -380,21 +363,13 @@ body.display-standalone {
   overscroll-behavior: contain;
 }
 
-.theme-dark .admin-panel-content,
-.theme-glass .admin-panel-content {
+.theme-dark .admin-panel-content {
   background: rgba(15, 23, 42, 0.95) !important;
   backdrop-filter: blur(20px) !important;
   border: 1px solid rgba(99, 102, 241, 0.3) !important;
   color: #f1f5f9 !important;
 }
-
-.theme-dark .admin-panel-content {
-  background: rgba(30, 41, 59, 0.95) !important;
-  border: 1px solid rgba(51, 65, 85, 0.5) !important;
-}
-
-.theme-dark .admin-panel-content *,
-.theme-glass .admin-panel-content * {
+.theme-dark .admin-panel-content * {
   color: inherit !important;
 }
 
@@ -406,7 +381,7 @@ body.display-standalone {
   }
 
   .subtle-grid,
-  .theme-glass::before {
+  .theme-dark::before {
     display: none;
   }
 
@@ -457,18 +432,14 @@ body.display-standalone {
 }
 
 .theme-dark .admin-panel-content input,
-.theme-glass .admin-panel-content input,
-.theme-dark .admin-panel-content textarea,
-.theme-glass .admin-panel-content textarea {
+.theme-dark .admin-panel-content textarea {
   background: rgba(15, 23, 42, 0.8) !important;
   border: 1px solid rgba(99, 102, 241, 0.3) !important;
   color: #f1f5f9 !important;
 }
 
 .theme-dark .admin-panel-content input::placeholder,
-.theme-glass .admin-panel-content input::placeholder,
-.theme-dark .admin-panel-content textarea::placeholder,
-.theme-glass .admin-panel-content textarea::placeholder {
+.theme-dark .admin-panel-content textarea::placeholder {
   color: rgba(241, 245, 249, 0.6) !important;
 }
 

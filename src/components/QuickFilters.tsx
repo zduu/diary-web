@@ -290,7 +290,7 @@ export function QuickFilters({
           <span
             className="rounded-full px-2 py-1 text-[11px]"
             style={{
-              backgroundColor: theme.mode === 'glass' ? 'rgba(148, 163, 184, 0.12)' : `${theme.colors.primary}12`,
+              backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.12)' : `${theme.colors.primary}12`,
               color: theme.colors.textSecondary,
               border: `1px solid ${theme.colors.border}`,
             }}
@@ -304,15 +304,15 @@ export function QuickFilters({
             onClick={handleClearAll}
             className={`flex items-center gap-1 rounded-full transition-colors ${isMobile ? 'px-2.5 py-1 text-xs' : 'px-3 py-1.5 text-sm'}`}
             style={{
-              backgroundColor: theme.mode === 'glass'
+              backgroundColor: theme.mode === 'dark'
                 ? 'rgba(148, 163, 184, 0.16)'
                 : `${theme.colors.accent}16`,
-              color: theme.mode === 'glass'
+              color: theme.mode === 'dark'
                 ? theme.colors.text
                 : theme.colors.accent,
-              border: `1px solid ${theme.mode === 'glass' ? theme.colors.border : `${theme.colors.accent}35`}`,
+              border: `1px solid ${theme.mode === 'dark' ? theme.colors.border : `${theme.colors.accent}35`}`,
               textShadow: 'none',
-              backdropFilter: theme.mode === 'glass' ? 'blur(10px)' : 'none'
+              backdropFilter: theme.mode === 'dark' ? 'blur(10px)' : 'none'
             }}
           >
             <X className="w-3 h-3" />

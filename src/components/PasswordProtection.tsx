@@ -82,16 +82,16 @@ export function PasswordProtection({ onAuthenticated, passwordSettings }: Passwo
   }
 
   const shellStyle = {
-    backgroundColor: theme.mode === 'glass' ? 'rgba(10, 18, 28, 0.68)' : theme.colors.surface,
+    backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.68)' : theme.colors.surface,
     border: `1px solid ${theme.colors.border}`,
     boxShadow:
-      theme.mode === 'glass'
+      theme.mode === 'dark'
         ? '0 30px 70px rgba(4, 10, 18, 0.34)'
         : '0 22px 54px rgba(15, 23, 42, 0.12)',
   };
 
   const fieldStyle = {
-    backgroundColor: theme.mode === 'glass' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.72)',
+    backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.72)',
     border: `1px solid ${theme.colors.border}`,
     color: theme.colors.text,
   };
@@ -113,7 +113,7 @@ export function PasswordProtection({ onAuthenticated, passwordSettings }: Passwo
           <div
             className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs uppercase tracking-[0.18em]"
             style={{
-              backgroundColor: theme.mode === 'glass' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.56)',
+              backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.56)',
               border: `1px solid ${theme.colors.border}`,
               color: theme.colors.primary,
             }}

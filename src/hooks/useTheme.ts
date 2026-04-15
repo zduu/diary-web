@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export type ThemeMode = 'light' | 'dark' | 'glass';
+export type ThemeMode = 'light' | 'dark';
 
 export interface ThemeConfig {
   mode: ThemeMode;
@@ -43,24 +43,6 @@ const themes: Record<ThemeMode, ThemeConfig> = {
   dark: {
     mode: 'dark',
     colors: {
-      primary: '#7dd3fc',
-      secondary: '#94a3b8',
-      background: '#0f1720',
-      surface: '#16202b',
-      text: '#e6edf5',
-      textSecondary: '#9aa7b6',
-      border: '#2b394b',
-      accent: '#f59e0b',
-    },
-    effects: {
-      blur: 'backdrop-blur-sm',
-      shadow: 'shadow-2xl shadow-black/40',
-      gradient: 'bg-gradient-to-br from-slate-950 to-slate-900',
-    },
-  },
-  glass: {
-    mode: 'glass',
-    colors: {
       primary: '#a5d8ff',
       secondary: '#cbd5e1',
       background: 'transparent',
@@ -78,11 +60,19 @@ const themes: Record<ThemeMode, ThemeConfig> = {
   },
 };
 
+function normalizeThemeMode(savedValue: string | null): ThemeMode {
+  if (savedValue === 'dark' || savedValue === 'glass') {
+    return 'dark';
+  }
+
+  return 'light';
+}
+
 export function useTheme() {
   const [currentTheme, setCurrentTheme] = useState<ThemeMode>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('diary-theme');
-      return (saved as ThemeMode) || 'light';
+      return normalizeThemeMode(saved);
     }
     return 'light';
   });
@@ -104,7 +94,7 @@ export function useTheme() {
     // 更新 body 类名
     document.body.className = `theme-${mode}`;
 
-    const themeColor = mode === 'dark' ? '#0f1720' : mode === 'glass' ? '#0a121c' : '#f3eee2';
+    const themeColor = mode === 'dark' ? '#0a121c' : '#f3eee2';
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor);
   };
 
@@ -113,7 +103,7 @@ export function useTheme() {
   }, [currentTheme]);
 
   const toggleTheme = () => {
-    const modes: ThemeMode[] = ['light', 'dark', 'glass'];
+    const modes: ThemeMode[] = ['light', 'dark'];
     const currentIndex = modes.indexOf(currentTheme);
     const nextIndex = (currentIndex + 1) % modes.length;
     setTheme(modes[nextIndex]);

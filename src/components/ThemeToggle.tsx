@@ -3,19 +3,18 @@ import { useThemeContext } from './ThemeProvider';
 const themeNames = {
   light: '纸页',
   dark: '夜读',
-  glass: '雾面',
 };
 
 export function ThemeToggle() {
   const { currentTheme, toggleTheme } = useThemeContext();
-  const nextThemeName = currentTheme === 'light' ? themeNames.dark : currentTheme === 'dark' ? themeNames.glass : themeNames.light;
-  const themeAccent = currentTheme === 'light' ? '#f59e0b' : currentTheme === 'dark' ? '#334155' : '#38bdf8';
+  const nextThemeName = currentTheme === 'light' ? themeNames.dark : themeNames.light;
+  const themeAccent = currentTheme === 'light' ? '#f59e0b' : '#38bdf8';
 
   return (
     <button
       onClick={toggleTheme}
       aria-label={`当前主题 ${themeNames[currentTheme]}，点击切换到 ${nextThemeName}`}
-      aria-description="主题切换按钮，会按顺序在纸页、夜读和雾面之间切换。"
+      aria-description="主题切换按钮，会在纸页和夜读之间切换。"
       className="group relative flex items-center gap-1.5 rounded-xl px-2.5 py-2 transition-transform duration-200 hover:-translate-y-0.5 md:gap-2 md:rounded-2xl md:px-3"
       style={{
         backgroundColor: 'var(--color-surface)',

@@ -363,16 +363,16 @@ export function SearchBar({
   );
 
   const inputShellStyle: CSSProperties = {
-    backgroundColor: theme.mode === 'glass' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.68)',
+    backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.68)',
     border: `1px solid ${theme.colors.border}`,
     boxShadow:
-      theme.mode === 'glass'
+      theme.mode === 'dark'
         ? '0 18px 36px rgba(4, 10, 18, 0.18)'
         : '0 10px 24px rgba(15, 23, 42, 0.06)',
   };
 
   const controlStyle: CSSProperties = {
-    backgroundColor: theme.mode === 'glass' ? 'rgba(10, 18, 28, 0.52)' : theme.colors.surface,
+    backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.52)' : theme.colors.surface,
     border: `1px solid ${theme.colors.border}`,
     color: theme.colors.text,
   };

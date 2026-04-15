@@ -52,7 +52,7 @@ const features = [
 const highlights = [
   { label: '记录方式', value: 'Markdown + 图片' },
   { label: '浏览方式', value: '时间轴 / 归纳 / 卡片' },
-  { label: '空间气质', value: '纸页、夜读、雾面' },
+  { label: '空间气质', value: '纸页、夜读' },
 ];
 
 export function WelcomePage({
@@ -90,7 +90,7 @@ export function WelcomePage({
       className={`welcome-page ${isBackground || isTransitioningToApp ? 'pointer-events-none' : ''}`}
       style={{
         minHeight: '100vh',
-        backgroundColor: theme.mode === 'glass' ? 'transparent' : theme.colors.background,
+        backgroundColor: theme.mode === 'dark' ? 'transparent' : theme.colors.background,
         opacity,
         transform,
         filter,
@@ -103,7 +103,7 @@ export function WelcomePage({
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            theme.mode === 'glass'
+            theme.mode === 'dark'
               ? 'radial-gradient(circle at top left, rgba(148, 197, 253, 0.18), transparent 34%), radial-gradient(circle at bottom right, rgba(110, 231, 183, 0.14), transparent 28%)'
               : 'radial-gradient(circle at top left, rgba(37, 99, 235, 0.1), transparent 30%), radial-gradient(circle at bottom right, rgba(217, 119, 6, 0.1), transparent 26%)',
         }}
@@ -231,7 +231,7 @@ export function WelcomePage({
                       <div
                         className="flex h-10 w-10 items-center justify-center rounded-2xl"
                         style={{
-                          backgroundColor: theme.mode === 'glass' ? 'rgba(147, 197, 253, 0.14)' : `${theme.colors.primary}12`,
+                          backgroundColor: theme.mode === 'dark' ? 'rgba(147, 197, 253, 0.14)' : `${theme.colors.primary}12`,
                           color: theme.colors.primary,
                         }}
                       >
@@ -271,7 +271,7 @@ export function WelcomePage({
                     仍然保留辨识度
                   </div>
                   <div className="text-sm leading-7" style={subTextStyle}>
-                    浅色更像纸页，深色适合夜读，玻璃主题保留雾面感，但不再靠夸张发光制造存在感。
+                    浅色更像纸页，夜读主题保留雾面层次和安静氛围，但不再额外拆出一套旧深色皮肤。
                   </div>
                 </div>
               </div>

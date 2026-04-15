@@ -18,7 +18,7 @@ export function showImportModeDialog(
       font-family: system-ui, -apple-system, sans-serif;
     `;
 
-    const isGlass = document.body.classList.contains('theme-glass');
+    const isGlass = document.body.classList.contains('theme-dark');
 
     dialog.innerHTML = `
       <div style="

@@ -93,10 +93,10 @@ export function EntryPreviewModal({
       }}
       panelClassName={`mx-4 w-full max-w-3xl overflow-hidden rounded-[2rem] ${theme.effects.blur}`}
       panelStyle={{
-        backgroundColor: theme.mode === 'glass' ? 'rgba(10, 18, 28, 0.82)' : theme.colors.surface,
+        backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.82)' : theme.colors.surface,
         border: `1px solid ${theme.colors.border}`,
         boxShadow:
-          theme.mode === 'glass'
+          theme.mode === 'dark'
             ? '0 30px 70px rgba(4, 10, 18, 0.38)'
             : '0 24px 56px rgba(15, 23, 42, 0.14)',
       }}

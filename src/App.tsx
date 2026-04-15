@@ -102,6 +102,8 @@ function AppContent() {
   const [sessionLoading, setSessionLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'card' | 'timeline' | 'archive'>('timeline');
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [dataMode, setDataMode] = useState<'local' | 'remote'>(() => apiService.getCurrentMode());
+  const [isSwitchingDataMode, setIsSwitchingDataMode] = useState(false);
 
   const enterAppTimeoutRef = useRef<number | null>(null);
   const finishTransitionTimeoutRef = useRef<number | null>(null);
@@ -274,6 +276,39 @@ function AppContent() {
     setIsAdminAuthenticated(session.isAdminAuthenticated);
   };
 
+  const handleDataModeChange = async (nextMode: 'local' | 'remote') => {
+    if (nextMode === dataMode || isSwitchingDataMode) {
+      return;
+    }
+
+    setIsSwitchingDataMode(true);
+
+    try {
+      if (nextMode === 'local') {
+        apiService.enableLocalMode();
+      } else {
+        apiService.enableRemoteMode();
+      }
+
+      setDataMode(apiService.getCurrentMode());
+
+      await Promise.all([
+        refreshEntries(),
+        refreshInterfaceSettings(),
+      ]);
+
+      const session = await apiService.getSession();
+      handleSessionChange(session);
+
+      showNotification(nextMode === 'local' ? '已切换到本地离线模式' : '已切换到远程 Pages 模式', 'success');
+    } catch (modeError) {
+      showNotification(modeError instanceof Error ? modeError.message : '切换数据模式失败', 'error');
+      setDataMode(apiService.getCurrentMode());
+    } finally {
+      setIsSwitchingDataMode(false);
+    }
+  };
+
   const accessibleEntriesCount = accessibleEntries.length;
   const filterMeta = useMemo(
     () => buildFilterMeta(entries, isAdminAuthenticated),
@@ -373,7 +408,7 @@ function AppContent() {
           isTransitioningToApp ? 'main-app-enter' : ''
         }`}
         style={{
-          backgroundColor: theme.mode === 'glass' ? 'transparent' : theme.colors.background,
+          backgroundColor: theme.mode === 'dark' ? 'transparent' : theme.colors.background,
           transform: showMainApp ? 'scale(1)' : 'scale(0.95)',
           filter: showMainApp ? 'blur(0px) brightness(1)' : 'blur(3px) brightness(0.8)',
           transition: isTransitioningToApp
@@ -451,6 +486,7 @@ function AppContent() {
                 entries={entries}
                 filterMeta={filterMeta}
                 viewMode={viewMode}
+                dataMode={dataMode}
                 activeBrowse={activeBrowse}
                 accessibleEntriesCount={accessibleEntriesCount}
                 displayEntriesCount={displayEntries.length}
@@ -458,9 +494,11 @@ function AppContent() {
                 interfaceSettingsLoading={interfaceSettingsLoading}
                 isAdminAuthenticated={isAdminAuthenticated}
                 isSearchPending={isSearchPending}
+                isSwitchingDataMode={isSwitchingDataMode}
                 onClearActiveBrowsing={handleClearActiveBrowsing}
                 onClearQuickFilters={handleClearQuickFilters}
                 onClearSearch={handleClearSearch}
+                onDataModeChange={handleDataModeChange}
                 onOpenExportModal={() => setIsExportModalOpen(true)}
                 onQuickFilterResults={handleQuickFilterResults}
                 onQuickFilterSummaryChange={onQuickFilterSummaryChange}

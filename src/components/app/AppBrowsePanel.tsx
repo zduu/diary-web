@@ -31,6 +31,7 @@ interface AppBrowsePanelProps {
   entries: DiaryEntry[];
   filterMeta: FilterMeta;
   viewMode: ViewMode;
+  dataMode: 'local' | 'remote';
   activeBrowse: BrowseDescriptor;
   accessibleEntriesCount: number;
   displayEntriesCount: number;
@@ -42,9 +43,11 @@ interface AppBrowsePanelProps {
   interfaceSettingsLoading: boolean;
   isAdminAuthenticated: boolean;
   isSearchPending: boolean;
+  isSwitchingDataMode: boolean;
   onClearActiveBrowsing: () => void;
   onClearQuickFilters: () => void;
   onClearSearch: () => void;
+  onDataModeChange: (mode: 'local' | 'remote') => void;
   onOpenExportModal: () => void;
   onQuickFilterResults: (results: DiaryEntry[]) => void;
   onQuickFilterSummaryChange: (items: BrowseSummaryItem[]) => void;
@@ -112,14 +115,12 @@ function getViewModeLabel(viewMode: ViewMode) {
   }
 }
 
-function getThemeModeLabel(mode: 'light' | 'dark' | 'glass') {
+function getThemeModeLabel(mode: 'light' | 'dark') {
   switch (mode) {
     case 'light':
       return '纸页浅色';
     case 'dark':
-      return '安静深色';
-    case 'glass':
-      return '雾面玻璃';
+      return '夜读夜读';
   }
 }
 
@@ -132,6 +133,7 @@ export function AppBrowsePanel({
   entries,
   filterMeta,
   viewMode,
+  dataMode,
   activeBrowse,
   accessibleEntriesCount,
   displayEntriesCount,
@@ -139,9 +141,11 @@ export function AppBrowsePanel({
   interfaceSettingsLoading,
   isAdminAuthenticated,
   isSearchPending,
+  isSwitchingDataMode,
   onClearActiveBrowsing,
   onClearQuickFilters,
   onClearSearch,
+  onDataModeChange,
   onOpenExportModal,
   onQuickFilterResults,
   onQuickFilterSummaryChange,
@@ -386,7 +390,43 @@ export function AppBrowsePanel({
                 className={`inline-flex items-center gap-2 rounded-full ${isMobile ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'}`}
                 style={{ ...quietButtonStyle, color: theme.colors.text }}
               >
-                最近公开内容可做离线快照
+                {dataMode === 'local' ? '本地数据可离线写作与浏览' : '远程数据可与 Pages 项目联动'}
+              </div>
+            </div>
+
+            <div className={`rounded-2xl ${isMobile ? 'space-y-2 p-2.5' : 'space-y-3 p-3'}`} style={shellSurfaceStyle}>
+              <div className={`${isMobile ? 'text-xs uppercase tracking-[0.14em]' : 'text-sm font-medium'}`} style={{ color: theme.colors.text }}>
+                数据模式
+              </div>
+              <div className={`${isMobile ? 'text-xs leading-5' : 'text-sm leading-6'}`} style={{ color: theme.colors.textSecondary }}>
+                {dataMode === 'local'
+                  ? '当前使用设备本地数据，适合 APK 离线记录。后续需要联动云端时，可切换到远程 Pages 模式。'
+                  : '当前连接 Cloudflare Pages / Functions。适合和线上项目保持同一套数据入口。'}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => onDataModeChange('local')}
+                  disabled={dataMode === 'local' || isSwitchingDataMode}
+                  className={`inline-flex items-center gap-2 rounded-xl font-medium transition-transform duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 ${
+                    isMobile ? 'px-3 py-2 text-xs' : 'px-3.5 py-2 text-sm'
+                  }`}
+                  style={dataMode === 'local' ? primaryButtonStyle : quietButtonStyle}
+                >
+                  本地离线
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDataModeChange('remote')}
+                  disabled={dataMode === 'remote' || isSwitchingDataMode || !isOnline}
+                  className={`inline-flex items-center gap-2 rounded-xl font-medium transition-transform duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 ${
+                    isMobile ? 'px-3 py-2 text-xs' : 'px-3.5 py-2 text-sm'
+                  }`}
+                  style={dataMode === 'remote' ? primaryButtonStyle : quietButtonStyle}
+                >
+                  远程 Pages
+                </button>
               </div>
             </div>
 

@@ -22,7 +22,7 @@ export function TimelineDateNavigator({
     <div
       className={`${className} flex gap-2 overflow-x-auto rounded-[1.4rem] p-2`}
       style={{
-        backgroundColor: theme.mode === 'glass' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.6)',
+        backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.6)',
         border: `1px solid ${theme.colors.border}`,
       }}
     >
@@ -43,7 +43,7 @@ export function TimelineDateNavigator({
             style={{
               background: isActive
                 ? `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.accent})`
-                : theme.mode === 'glass'
+                : theme.mode === 'dark'
                   ? 'rgba(10, 18, 28, 0.52)'
                   : theme.colors.surface,
               border: `1px solid ${isActive ? 'transparent' : theme.colors.border}`,

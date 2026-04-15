@@ -31,8 +31,8 @@ export function ContentStatePanel({
   const isCompact = density === 'compact';
   const panelStyle = surface === 'muted' ? getMutedSurfaceStyle(theme) : getShellSurfaceStyle(theme);
   const alignClassName = align === 'left' ? 'items-start text-left' : 'items-center text-center';
-  const iconColor = theme.mode === 'glass' ? 'rgba(255, 255, 255, 0.92)' : theme.colors.primary;
-  const iconBackground = theme.mode === 'glass' ? 'rgba(148, 163, 184, 0.14)' : `${theme.colors.primary}12`;
+  const iconColor = theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.92)' : theme.colors.primary;
+  const iconBackground = theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.14)' : `${theme.colors.primary}12`;
 
   return (
     <section
@@ -64,7 +64,7 @@ export function ContentStatePanel({
 
         <h3
           className={`${isCompact ? 'text-base' : isMobile ? 'text-lg' : 'text-xl'} font-semibold tracking-[-0.03em]`}
-          style={{ color: theme.mode === 'glass' ? '#ffffff' : theme.colors.text }}
+          style={{ color: theme.mode === 'dark' ? '#ffffff' : theme.colors.text }}
         >
           {title}
         </h3>
@@ -72,7 +72,7 @@ export function ContentStatePanel({
         {description && (
           <p
             className={`${isCompact ? 'mt-2 text-sm leading-6' : isMobile ? 'mt-2 text-sm leading-6' : 'mt-3 text-base leading-7'} max-w-2xl`}
-            style={{ color: theme.mode === 'glass' ? 'rgba(255, 255, 255, 0.78)' : theme.colors.textSecondary }}
+            style={{ color: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.78)' : theme.colors.textSecondary }}
           >
             {description}
           </p>

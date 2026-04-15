@@ -41,7 +41,7 @@ function ArchiveEditButton({
       }}
       className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs transition-transform duration-200 hover:-translate-y-0.5"
       style={{
-        backgroundColor: theme.mode === 'glass' ? 'rgba(148, 163, 184, 0.1)' : 'rgba(255, 255, 255, 0.72)',
+        backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.1)' : 'rgba(255, 255, 255, 0.72)',
         border: `1px solid ${theme.colors.border}`,
         color: theme.colors.textSecondary,
       }}
@@ -140,8 +140,8 @@ export function ArchiveEntryRenderer({
             <div
               className={`flex h-12 w-12 flex-col items-center justify-center rounded-lg font-medium ${isMobile ? 'text-xs' : 'text-sm'}`}
               style={{
-                backgroundColor: theme.mode === 'glass' ? 'rgba(255, 255, 255, 0.1)' : `${theme.colors.primary}15`,
-                color: theme.mode === 'glass' ? 'white' : theme.colors.primary,
+                backgroundColor: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : `${theme.colors.primary}15`,
+                color: theme.mode === 'dark' ? 'white' : theme.colors.primary,
               }}
             >
               <span>{dateLabel}</span>
@@ -196,17 +196,17 @@ export function ArchiveEntryRenderer({
         id={entry.id ? `entry-${entry.id}` : undefined}
         className={`archive-entry-shell cursor-pointer rounded-lg border p-4 transition-all hover:shadow-md ${isMobile ? 'mb-3' : 'mb-4'} ${isHighlighted ? 'ring-highlight' : ''}`}
         style={{
-          backgroundColor: theme.mode === 'glass'
+          backgroundColor: theme.mode === 'dark'
             ? 'rgba(255, 255, 255, 0.05)'
             : isHighlighted
               ? `${theme.colors.primary}08`
               : theme.colors.surface,
-          borderColor: theme.mode === 'glass'
+          borderColor: theme.mode === 'dark'
             ? 'rgba(255, 255, 255, 0.1)'
             : isHighlighted
               ? theme.colors.primary
               : theme.colors.border,
-          backdropFilter: theme.mode === 'glass' ? 'blur(5px)' : 'none',
+          backdropFilter: theme.mode === 'dark' ? 'blur(5px)' : 'none',
           boxShadow: isHighlighted ? `0 0 0 2px ${theme.colors.primary}20` : 'none',
         }}
         onClick={openPreview}
@@ -269,7 +269,7 @@ export function ArchiveEntryRenderer({
         id={entry.id ? `entry-${entry.id}` : undefined}
         className={`archive-entry-shell flex cursor-pointer items-center gap-3 rounded-lg p-2 transition-all hover:bg-opacity-50 ${isHighlighted ? 'ring-highlight' : ''}`}
         style={{
-          backgroundColor: theme.mode === 'glass'
+          backgroundColor: theme.mode === 'dark'
             ? 'rgba(255, 255, 255, 0.02)'
             : isHighlighted
               ? `${theme.colors.primary}08`
@@ -331,12 +331,12 @@ export function ArchiveEntryRenderer({
       <div
         className="flex-1 cursor-pointer rounded-lg p-3 transition-colors hover:bg-opacity-80"
         style={{
-          backgroundColor: theme.mode === 'glass'
+          backgroundColor: theme.mode === 'dark'
             ? 'rgba(255, 255, 255, 0.05)'
             : isHighlighted
               ? `${theme.colors.primary}08`
               : theme.colors.surface,
-          border: `1px solid ${theme.mode === 'glass' ? 'rgba(255, 255, 255, 0.1)' : isHighlighted ? theme.colors.primary : theme.colors.border}`,
+          border: `1px solid ${theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : isHighlighted ? theme.colors.primary : theme.colors.border}`,
           boxShadow: isHighlighted ? `0 0 0 2px ${theme.colors.primary}20` : 'none',
         }}
         onClick={openPreview}
