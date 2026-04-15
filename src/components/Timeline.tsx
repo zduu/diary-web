@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { DiaryEntry } from '../types/index.ts';
 import { DiaryCard } from './DiaryCard';
 import { ContentStatePanel } from './ContentStatePanel';
@@ -28,6 +28,7 @@ interface TimelineProps {
   viewMode: ViewMode;
   highlightEntryId?: number | null;
   isPending?: boolean;
+  recommendationsEnabled?: boolean;
 }
 
 function getPendingViewLabel(viewMode: ViewMode) {
@@ -48,6 +49,7 @@ export function Timeline({
   viewMode,
   highlightEntryId = null,
   isPending = false,
+  recommendationsEnabled = true,
 }: TimelineProps) {
   const { theme } = useThemeContext();
   const { isAdminAuthenticated } = useAdminAuth();
@@ -72,7 +74,7 @@ export function Timeline({
   const openPreview = (entry: DiaryEntry) => {
     setPreviewIndex(previewIndexById.get(entry.id) ?? null);
   };
-  const recommendationSection = recommendations.length > 0 ? (
+  const recommendationSection = recommendationsEnabled && recommendations.length > 0 ? (
     <RecommendationsPanel
       recommendations={recommendations}
       isPending={isPending}
@@ -98,9 +100,10 @@ export function Timeline({
     }
   }, [highlightEntryId, viewMode]);
 
-  // 根据视图模式选择对应的组件
+  let content: ReactNode;
+
   if (viewMode === 'timeline') {
-    return (
+    content = (
       <div className="space-y-5">
         {recommendationSection}
         <TimelineView
@@ -112,10 +115,8 @@ export function Timeline({
         />
       </div>
     );
-  }
-
-  if (viewMode === 'archive') {
-    return (
+  } else if (viewMode === 'archive') {
+    content = (
       <div className="space-y-5">
         {recommendationSection}
         <Suspense
@@ -135,10 +136,9 @@ export function Timeline({
         </Suspense>
       </div>
     );
-  }
-
-  return (
-    <div className={`${isMobile ? 'max-w-full' : 'max-w-4xl'} mx-auto`}>
+  } else {
+    content = (
+      <div className={`${isMobile ? 'max-w-full' : 'max-w-4xl'} mx-auto`}>
       {isPending && (
         <section
           className={`mb-4 overflow-hidden rounded-[1.25rem] ${isMobile ? 'p-2.5' : 'p-3'}`}
@@ -222,7 +222,13 @@ export function Timeline({
           isMobile={isMobile}
         />
       )}
+      </div>
+    );
+  }
 
+  return (
+    <>
+      {content}
       <EntryPreviewModal
         entry={previewEntry}
         isOpen={previewEntry !== null}
@@ -235,6 +241,6 @@ export function Timeline({
         onPrevious={() => setPreviewIndex((current) => (current === null ? current : Math.max(0, current - 1)))}
         onNext={() => setPreviewIndex((current) => (current === null ? current : Math.min(visibleEntries.length - 1, current + 1)))}
       />
-    </div>
+    </>
   );
 }

@@ -1,6 +1,12 @@
 import type { AdminInterfaceSettings, InterfaceFeatureKey } from './adminPanelTypes';
 
-type InterfaceFeatureSettingKey = 'quick_filters_enabled' | 'export_enabled' | 'archive_view_enabled';
+type InterfaceFeatureSettingKey =
+  | 'quick_filters_enabled'
+  | 'export_enabled'
+  | 'archive_view_enabled'
+  | 'recommendations_enabled'
+  | 'browse_status_enabled'
+  | 'device_status_enabled';
 
 type InterfaceFeatureSchema = {
   apiKey: InterfaceFeatureSettingKey;
@@ -32,6 +38,27 @@ export const interfaceFeatureSchema: Record<InterfaceFeatureKey, InterfaceFeatur
     enabledDescription: '隐藏归纳显示模式',
     disabledDescription: '显示归纳显示模式',
   },
+  recommendations: {
+    apiKey: 'recommendations_enabled',
+    title: '推荐入口',
+    successLabel: '推荐入口',
+    enabledDescription: '隐藏 RECOMMENDATIONS 推荐区',
+    disabledDescription: '显示 RECOMMENDATIONS 推荐区',
+  },
+  browseStatus: {
+    apiKey: 'browse_status_enabled',
+    title: '当前浏览状态',
+    successLabel: '当前浏览状态',
+    enabledDescription: '隐藏当前浏览状态卡片',
+    disabledDescription: '显示当前浏览状态卡片',
+  },
+  deviceStatus: {
+    apiKey: 'device_status_enabled',
+    title: '设备与离线',
+    successLabel: '设备与离线',
+    enabledDescription: '隐藏设备与离线卡片',
+    disabledDescription: '显示设备与离线卡片',
+  },
 };
 
 export function createDefaultInterfaceSettings(): AdminInterfaceSettings {
@@ -39,5 +66,8 @@ export function createDefaultInterfaceSettings(): AdminInterfaceSettings {
     quickFilters: { enabled: true },
     export: { enabled: true },
     archiveView: { enabled: true },
+    recommendations: { enabled: true },
+    browseStatus: { enabled: true },
+    deviceStatus: { enabled: true },
   };
 }

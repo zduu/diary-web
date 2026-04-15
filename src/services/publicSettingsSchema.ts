@@ -6,6 +6,9 @@ export const publicBooleanSettingDefaults = {
   export_enabled: true,
   archive_view_enabled: true,
   welcome_page_enabled: true,
+  recommendations_enabled: true,
+  browse_status_enabled: true,
+  device_status_enabled: true,
 } as const;
 
 export type PublicBooleanSettingKey = keyof typeof publicBooleanSettingDefaults;
@@ -23,6 +26,9 @@ const publicSettingResponseFields: Record<PublicBooleanSettingKey, keyof PublicS
   export_enabled: 'exportEnabled',
   archive_view_enabled: 'archiveViewEnabled',
   welcome_page_enabled: 'welcomePageEnabled',
+  recommendations_enabled: 'recommendationsEnabled',
+  browse_status_enabled: 'browseStatusEnabled',
+  device_status_enabled: 'deviceStatusEnabled',
 };
 
 export function isPublicBooleanSettingKey(key: string): key is PublicBooleanSettingKey {

@@ -39,6 +39,9 @@ interface AppBrowsePanelProps {
     archiveView: { enabled: boolean };
     export: { enabled: boolean };
     quickFilters: { enabled: boolean };
+    recommendations: { enabled: boolean };
+    browseStatus: { enabled: boolean };
+    deviceStatus: { enabled: boolean };
   };
   interfaceSettingsLoading: boolean;
   isAdminAuthenticated: boolean;
@@ -120,7 +123,7 @@ function getThemeModeLabel(mode: 'light' | 'dark') {
     case 'light':
       return '纸页浅色';
     case 'dark':
-      return '夜读夜读';
+      return '夜读';
   }
 }
 
@@ -188,6 +191,8 @@ export function AppBrowsePanel({
     interfaceSettings.export.enabled &&
     !activeBrowse.mode &&
     entries.length > 0;
+  const showBrowseStatus = interfaceSettings.browseStatus.enabled;
+  const showDeviceStatus = interfaceSettings.deviceStatus.enabled;
   const suspenseFallback = (
     <ContentStatePanel
       icon="⌛"
@@ -293,32 +298,6 @@ export function AppBrowsePanel({
           )}
 
           <div className={`rounded-[1.4rem] ${isMobile ? 'space-y-2.5 p-2.5' : 'space-y-4 p-4'}`} style={mutedSurfaceStyle}>
-            <div className={`flex ${isMobile ? 'items-center justify-between gap-2' : 'flex-col gap-1'}`}>
-              <div>
-                <div className={`${isMobile ? 'text-xs uppercase tracking-[0.14em]' : 'text-sm font-medium'}`} style={{ color: isMobile ? theme.colors.textSecondary : theme.colors.text }}>
-                  {isSearchPending ? '结果更新中' : '当前浏览状态'}
-                </div>
-                <div className={`text-sm ${isMobile ? 'mt-1 leading-5' : 'leading-6'}`} style={{ color: theme.colors.textSecondary }}>
-                  {isSearchPending
-                    ? '正在根据最新关键词和筛选条件更新列表。'
-                    : isMobile
-                      ? `${displayEntriesCount} / ${accessibleEntriesCount} 篇`
-                      : activeBrowse.statusText}
-                </div>
-              </div>
-              {isMobile && (
-                <div
-                  className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium"
-                  style={{ ...quietButtonStyle, color: theme.colors.text }}
-                >
-                  {displayEntriesCount} 篇
-                </div>
-              )}
-              <div className="sr-only" aria-live="polite">
-                {activeBrowse.announcement}
-              </div>
-            </div>
-
             <div className={`flex flex-wrap items-center ${isMobile ? 'gap-1.5' : 'gap-2'}`}>
               {activeBrowse.mode && (
                 <button
@@ -356,110 +335,142 @@ export function AppBrowsePanel({
             </Suspense>
           </div>
 
-          <div className={`rounded-[1.4rem] ${isMobile ? 'space-y-2 p-2.5' : 'space-y-3 p-4'}`} style={mutedSurfaceStyle}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className={`${isMobile ? 'text-xs uppercase tracking-[0.14em]' : 'text-sm font-medium'}`} style={{ color: theme.colors.text }}>
-                  设备与离线
+          {showBrowseStatus && (
+            <div className={`rounded-[1.4rem] ${isMobile ? 'space-y-2.5 p-2.5' : 'space-y-4 p-4'}`} style={mutedSurfaceStyle}>
+              <div className={`flex ${isMobile ? 'items-center justify-between gap-2' : 'flex-col gap-1'}`}>
+                <div>
+                  <div className={`${isMobile ? 'text-xs uppercase tracking-[0.14em]' : 'text-sm font-medium'}`} style={{ color: isMobile ? theme.colors.textSecondary : theme.colors.text }}>
+                    {isSearchPending ? '结果更新中' : '当前浏览状态'}
+                  </div>
+                  <div className={`text-sm ${isMobile ? 'mt-1 leading-5' : 'leading-6'}`} style={{ color: theme.colors.textSecondary }}>
+                    {isSearchPending
+                      ? '正在根据最新关键词和筛选条件更新列表。'
+                      : isMobile
+                        ? `${displayEntriesCount} / ${accessibleEntriesCount} 篇`
+                        : activeBrowse.statusText}
+                  </div>
                 </div>
-                <div className={`${isMobile ? 'mt-1 text-xs leading-5' : 'mt-1.5 text-sm leading-6'}`} style={{ color: theme.colors.textSecondary }}>
-                  {isStandalone
-                    ? '已接近原生应用形态打开。'
-                    : '可添加到手机主屏幕或桌面，保留更像本地应用的入口。'}
+                {isMobile && (
+                  <div
+                    className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium"
+                    style={{ ...quietButtonStyle, color: theme.colors.text }}
+                  >
+                    {displayEntriesCount} 篇
+                  </div>
+                )}
+                <div className="sr-only" aria-live="polite">
+                  {activeBrowse.announcement}
                 </div>
-              </div>
-
-              <div
-                className={`inline-flex items-center gap-2 rounded-full ${isMobile ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'}`}
-                style={{ ...quietButtonStyle, color: theme.colors.text }}
-              >
-                <Smartphone className="h-3.5 w-3.5" />
-                {isStandalone ? '已安装' : 'Web App'}
               </div>
             </div>
+          )}
 
-            <div className="flex flex-wrap gap-2">
-              <div
-                className={`inline-flex items-center gap-2 rounded-full ${isMobile ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'}`}
-                style={{ ...quietButtonStyle, color: theme.colors.text }}
-              >
-                {isOnline ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-                {isOnline ? '在线同步中' : '当前离线'}
-              </div>
-              <div
-                className={`inline-flex items-center gap-2 rounded-full ${isMobile ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'}`}
-                style={{ ...quietButtonStyle, color: theme.colors.text }}
-              >
-                {dataMode === 'local' ? '本地数据可离线写作与浏览' : '远程数据可与 Pages 项目联动'}
-              </div>
-            </div>
+          {showDeviceStatus && (
+            <div className={`rounded-[1.4rem] ${isMobile ? 'space-y-2 p-2.5' : 'space-y-3 p-4'}`} style={mutedSurfaceStyle}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className={`${isMobile ? 'text-xs uppercase tracking-[0.14em]' : 'text-sm font-medium'}`} style={{ color: theme.colors.text }}>
+                    设备与离线
+                  </div>
+                  <div className={`${isMobile ? 'mt-1 text-xs leading-5' : 'mt-1.5 text-sm leading-6'}`} style={{ color: theme.colors.textSecondary }}>
+                    {isStandalone
+                      ? '已接近原生应用形态打开。'
+                      : '可添加到手机主屏幕或桌面，保留更像本地应用的入口。'}
+                  </div>
+                </div>
 
-            <div className={`rounded-2xl ${isMobile ? 'space-y-2 p-2.5' : 'space-y-3 p-3'}`} style={shellSurfaceStyle}>
-              <div className={`${isMobile ? 'text-xs uppercase tracking-[0.14em]' : 'text-sm font-medium'}`} style={{ color: theme.colors.text }}>
-                数据模式
-              </div>
-              <div className={`${isMobile ? 'text-xs leading-5' : 'text-sm leading-6'}`} style={{ color: theme.colors.textSecondary }}>
-                {dataMode === 'local'
-                  ? '当前使用设备本地数据，适合 APK 离线记录。后续需要联动云端时，可切换到远程 Pages 模式。'
-                  : '当前连接 Cloudflare Pages / Functions。适合和线上项目保持同一套数据入口。'}
+                <div
+                  className={`inline-flex items-center gap-2 rounded-full ${isMobile ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'}`}
+                  style={{ ...quietButtonStyle, color: theme.colors.text }}
+                >
+                  <Smartphone className="h-3.5 w-3.5" />
+                  {isStandalone ? '已安装' : 'Web App'}
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => onDataModeChange('local')}
-                  disabled={dataMode === 'local' || isSwitchingDataMode}
-                  className={`inline-flex items-center gap-2 rounded-xl font-medium transition-transform duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 ${
-                    isMobile ? 'px-3 py-2 text-xs' : 'px-3.5 py-2 text-sm'
-                  }`}
-                  style={dataMode === 'local' ? primaryButtonStyle : quietButtonStyle}
+                <div
+                  className={`inline-flex items-center gap-2 rounded-full ${isMobile ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'}`}
+                  style={{ ...quietButtonStyle, color: theme.colors.text }}
                 >
-                  本地离线
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDataModeChange('remote')}
-                  disabled={dataMode === 'remote' || isSwitchingDataMode || !isOnline}
-                  className={`inline-flex items-center gap-2 rounded-xl font-medium transition-transform duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 ${
-                    isMobile ? 'px-3 py-2 text-xs' : 'px-3.5 py-2 text-sm'
-                  }`}
-                  style={dataMode === 'remote' ? primaryButtonStyle : quietButtonStyle}
+                  {isOnline ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
+                  {isOnline ? '在线同步中' : '当前离线'}
+                </div>
+                <div
+                  className={`inline-flex items-center gap-2 rounded-full ${isMobile ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'}`}
+                  style={{ ...quietButtonStyle, color: theme.colors.text }}
                 >
-                  远程 Pages
-                </button>
+                  {dataMode === 'local' ? '本地数据可离线写作与浏览' : '远程数据可与 Pages 项目联动'}
+                </div>
               </div>
-            </div>
 
-            {!isStandalone && (
               <div className={`rounded-2xl ${isMobile ? 'space-y-2 p-2.5' : 'space-y-3 p-3'}`} style={shellSurfaceStyle}>
+                <div className={`${isMobile ? 'text-xs uppercase tracking-[0.14em]' : 'text-sm font-medium'}`} style={{ color: theme.colors.text }}>
+                  数据模式
+                </div>
                 <div className={`${isMobile ? 'text-xs leading-5' : 'text-sm leading-6'}`} style={{ color: theme.colors.textSecondary }}>
-                  {canPromptInstall
-                    ? '浏览器已准备好安装入口，安装后可更像本地应用一样从主屏幕或桌面打开。'
-                    : lastOutcome === 'accepted'
-                      ? '安装请求已接受，浏览器完成安装后就能以独立应用方式打开。'
-                    : lastOutcome === 'dismissed'
-                      ? '已关闭安装弹窗，稍后仍可从浏览器菜单中安装。'
-                      : manualInstallHint}
+                  {dataMode === 'local'
+                    ? '当前使用设备本地数据，适合 APK 离线记录。后续需要联动云端时，可切换到远程 Pages 模式。'
+                    : '当前连接 Cloudflare Pages / Functions。适合和线上项目保持同一套数据入口。'}
                 </div>
 
-                {canPromptInstall && (
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      void promptInstall();
-                    }}
-                    className={`inline-flex items-center gap-2 rounded-xl font-medium transition-transform duration-200 hover:-translate-y-0.5 ${
+                    onClick={() => onDataModeChange('local')}
+                    disabled={dataMode === 'local' || isSwitchingDataMode}
+                    className={`inline-flex items-center gap-2 rounded-xl font-medium transition-transform duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 ${
                       isMobile ? 'px-3 py-2 text-xs' : 'px-3.5 py-2 text-sm'
                     }`}
-                    style={primaryButtonStyle}
+                    style={dataMode === 'local' ? primaryButtonStyle : quietButtonStyle}
                   >
-                    <Download className={isMobile ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
-                    {isMobile ? '安装应用' : '安装到设备'}
+                    本地离线
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => onDataModeChange('remote')}
+                    disabled={dataMode === 'remote' || isSwitchingDataMode || !isOnline}
+                    className={`inline-flex items-center gap-2 rounded-xl font-medium transition-transform duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 ${
+                      isMobile ? 'px-3 py-2 text-xs' : 'px-3.5 py-2 text-sm'
+                    }`}
+                    style={dataMode === 'remote' ? primaryButtonStyle : quietButtonStyle}
+                  >
+                    远程 Pages
+                  </button>
+                </div>
               </div>
-            )}
-          </div>
+
+              {!isStandalone && (
+                <div className={`rounded-2xl ${isMobile ? 'space-y-2 p-2.5' : 'space-y-3 p-3'}`} style={shellSurfaceStyle}>
+                  <div className={`${isMobile ? 'text-xs leading-5' : 'text-sm leading-6'}`} style={{ color: theme.colors.textSecondary }}>
+                    {canPromptInstall
+                      ? '浏览器已准备好安装入口，安装后可更像本地应用一样从主屏幕或桌面打开。'
+                      : lastOutcome === 'accepted'
+                        ? '安装请求已接受，浏览器完成安装后就能以独立应用方式打开。'
+                        : lastOutcome === 'dismissed'
+                          ? '已关闭安装弹窗，稍后仍可从浏览器菜单中安装。'
+                          : manualInstallHint}
+                  </div>
+
+                  {canPromptInstall && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void promptInstall();
+                      }}
+                      className={`inline-flex items-center gap-2 rounded-xl font-medium transition-transform duration-200 hover:-translate-y-0.5 ${
+                        isMobile ? 'px-3 py-2 text-xs' : 'px-3.5 py-2 text-sm'
+                      }`}
+                      style={primaryButtonStyle}
+                    >
+                      <Download className={isMobile ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+                      {isMobile ? '安装应用' : '安装到设备'}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </aside>
       </div>
     </section>

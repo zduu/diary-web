@@ -37,6 +37,15 @@ const defaultLoadedSettings: Awaited<ReturnType<typeof adminSettingsStore.loadAd
     archiveView: {
       enabled: true,
     },
+    recommendations: {
+      enabled: true,
+    },
+    browseStatus: {
+      enabled: true,
+    },
+    deviceStatus: {
+      enabled: true,
+    },
   },
 };
 

@@ -28,7 +28,13 @@ export interface PasswordSettings extends ToggleSetting {
   configured: boolean;
 }
 
-export type InterfaceFeatureKey = 'quickFilters' | 'export' | 'archiveView';
+export type InterfaceFeatureKey =
+  | 'quickFilters'
+  | 'export'
+  | 'archiveView'
+  | 'recommendations'
+  | 'browseStatus'
+  | 'deviceStatus';
 
 export type AdminInterfaceSettings = Record<InterfaceFeatureKey, ToggleSetting>;
 

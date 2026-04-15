@@ -536,6 +536,7 @@ function AppContent() {
                     viewMode={viewMode}
                     highlightEntryId={highlightEntryId}
                     isPending={isSearchPending}
+                    recommendationsEnabled={interfaceSettings.recommendations.enabled}
                   />
                 </Suspense>
               </div>

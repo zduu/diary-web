@@ -16,6 +16,9 @@ function createInterfaceSettingsResponse(settings: Awaited<ReturnType<typeof api
     quickFilters: { enabled: settings.quickFiltersEnabled },
     export: { enabled: settings.exportEnabled },
     archiveView: { enabled: settings.archiveViewEnabled },
+    recommendations: { enabled: settings.recommendationsEnabled },
+    browseStatus: { enabled: settings.browseStatusEnabled },
+    deviceStatus: { enabled: settings.deviceStatusEnabled },
   };
 }
 
@@ -48,7 +51,16 @@ export async function persistPasswordSettings(settings: PasswordSettings) {
   await apiService.setSetting('app_password_enabled', settings.enabled.toString());
 }
 
-export async function persistFeatureToggle(key: 'quick_filters_enabled' | 'export_enabled' | 'archive_view_enabled', enabled: boolean) {
+export async function persistFeatureToggle(
+  key:
+    | 'quick_filters_enabled'
+    | 'export_enabled'
+    | 'archive_view_enabled'
+    | 'recommendations_enabled'
+    | 'browse_status_enabled'
+    | 'device_status_enabled',
+  enabled: boolean
+) {
   await apiService.setSetting(key, enabled.toString());
 }
 

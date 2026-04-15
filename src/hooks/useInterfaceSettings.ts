@@ -14,6 +14,9 @@ interface InterfaceSettings {
   archiveView: ToggleSetting;
   welcomePage: ToggleSetting;
   passwordProtection: ToggleSetting;
+  recommendations: ToggleSetting;
+  browseStatus: ToggleSetting;
+  deviceStatus: ToggleSetting;
 }
 
 function createToggleSetting(enabled: boolean): ToggleSetting {
@@ -27,6 +30,9 @@ function createInterfaceSettings(publicSettings: PublicSettingsResponse): Interf
     archiveView: createToggleSetting(publicSettings.archiveViewEnabled),
     welcomePage: createToggleSetting(publicSettings.welcomePageEnabled),
     passwordProtection: createToggleSetting(publicSettings.passwordProtectionEnabled),
+    recommendations: createToggleSetting(publicSettings.recommendationsEnabled),
+    browseStatus: createToggleSetting(publicSettings.browseStatusEnabled),
+    deviceStatus: createToggleSetting(publicSettings.deviceStatusEnabled),
   };
 }
 

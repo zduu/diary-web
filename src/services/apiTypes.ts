@@ -9,6 +9,9 @@ export interface PublicSettingsResponse {
   exportEnabled: boolean;
   archiveViewEnabled: boolean;
   welcomePageEnabled: boolean;
+  recommendationsEnabled: boolean;
+  browseStatusEnabled: boolean;
+  deviceStatusEnabled: boolean;
 }
 
 export interface AdminSettingsResponse extends PublicSettingsResponse {

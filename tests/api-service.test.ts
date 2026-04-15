@@ -396,6 +396,9 @@ test('mock mode public settings fall back to defaults on invalid boolean strings
     export_enabled: 'invalid',
     archive_view_enabled: 'invalid',
     welcome_page_enabled: 'invalid',
+    recommendations_enabled: 'invalid',
+    browse_status_enabled: 'invalid',
+    device_status_enabled: 'invalid',
   }));
 
   const ApiService = await loadApiServiceClass();
@@ -407,4 +410,7 @@ test('mock mode public settings fall back to defaults on invalid boolean strings
   assert.equal(settings.exportEnabled, true);
   assert.equal(settings.archiveViewEnabled, true);
   assert.equal(settings.welcomePageEnabled, true);
+  assert.equal(settings.recommendationsEnabled, true);
+  assert.equal(settings.browseStatusEnabled, true);
+  assert.equal(settings.deviceStatusEnabled, true);
 });

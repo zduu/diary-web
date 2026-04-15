@@ -221,6 +221,9 @@ export class MockApiService {
       export_enabled: 'true',
       archive_view_enabled: 'true',
       welcome_page_enabled: 'true',
+      recommendations_enabled: 'true',
+      browse_status_enabled: 'true',
+      device_status_enabled: 'true',
     };
   }
 

@@ -5,6 +5,7 @@ import { AdminAuthProvider } from './AdminAuthContext';
 import { ThemeProvider } from './ThemeProvider';
 import type { DiaryEntry } from '../types/index.ts';
 import { render } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 const sampleEntries: DiaryEntry[] = [
   {
@@ -75,5 +76,21 @@ describe('Timeline recommendations', () => {
 
     expect(screen.getByText('给你三条更轻的回看入口。')).toBeInTheDocument();
     expect(screen.queryByText('隐藏的一篇')).not.toBeInTheDocument();
+  });
+
+  it('opens the preview modal from recommendations in timeline view', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThemeProvider>
+        <AdminAuthProvider>
+          <Timeline entries={[sampleEntries[0], sampleEntries[1], sampleEntries[2]]} viewMode="timeline" />
+        </AdminAuthProvider>
+      </ThemeProvider>
+    );
+
+    await user.click(screen.getAllByRole('button', { name: '打开这篇' })[0]);
+
+    expect(await screen.findByText('日记预览')).toBeInTheDocument();
   });
 });

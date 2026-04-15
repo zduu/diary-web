@@ -675,6 +675,9 @@ test('public settings endpoint does not expose password fields', async () => {
       export_enabled: 'true',
       archive_view_enabled: 'true',
       welcome_page_enabled: 'false',
+      recommendations_enabled: 'false',
+      browse_status_enabled: 'true',
+      device_status_enabled: 'false',
       admin_password: 'should-not-leak',
       app_password: 'should-not-leak',
     },
@@ -687,9 +690,12 @@ test('public settings endpoint does not expose password fields', async () => {
   assert.equal(body.success, true);
   assert.deepEqual(Object.keys(body.data).sort(), [
     'archiveViewEnabled',
+    'browseStatusEnabled',
+    'deviceStatusEnabled',
     'exportEnabled',
     'passwordProtectionEnabled',
     'quickFiltersEnabled',
+    'recommendationsEnabled',
     'welcomePageEnabled',
   ]);
   assert.equal('admin_password' in body.data, false);
@@ -704,6 +710,9 @@ test('public settings fall back to defaults when stored boolean values are inval
       export_enabled: 'invalid',
       archive_view_enabled: 'invalid',
       welcome_page_enabled: 'invalid',
+      recommendations_enabled: 'invalid',
+      browse_status_enabled: 'invalid',
+      device_status_enabled: 'invalid',
     },
   });
 
@@ -717,6 +726,9 @@ test('public settings fall back to defaults when stored boolean values are inval
       exportEnabled: boolean;
       archiveViewEnabled: boolean;
       welcomePageEnabled: boolean;
+      recommendationsEnabled: boolean;
+      browseStatusEnabled: boolean;
+      deviceStatusEnabled: boolean;
     };
   }>(publicSettingsResponse);
 
@@ -726,6 +738,9 @@ test('public settings fall back to defaults when stored boolean values are inval
   assert.equal(publicSettingsBody.data.exportEnabled, true);
   assert.equal(publicSettingsBody.data.archiveViewEnabled, true);
   assert.equal(publicSettingsBody.data.welcomePageEnabled, true);
+  assert.equal(publicSettingsBody.data.recommendationsEnabled, true);
+  assert.equal(publicSettingsBody.data.browseStatusEnabled, true);
+  assert.equal(publicSettingsBody.data.deviceStatusEnabled, true);
 
   const singleSettingResponse = await getSettingByKey({
     params: { key: 'quick_filters_enabled' },
