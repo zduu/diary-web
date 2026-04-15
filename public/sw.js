@@ -1,4 +1,4 @@
-const CACHE_NAME = 'diary-shell-v1';
+const CACHE_NAME = 'diary-shell-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.webmanifest',
@@ -47,10 +47,19 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(async () => {
-        const cachedResponse = await caches.match(request);
-        return cachedResponse || caches.match('/');
-      })
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse.ok) {
+            const responseClone = networkResponse.clone();
+            void caches.open(CACHE_NAME).then((cache) => cache.put('/', responseClone));
+          }
+
+          return networkResponse;
+        })
+        .catch(async () => {
+          const cachedResponse = await caches.match(request);
+          return cachedResponse || caches.match('/');
+        })
     );
     return;
   }
