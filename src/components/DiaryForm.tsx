@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import React, { Suspense, lazy, useEffect, useState, type CSSProperties } from 'react';
 import type { DiaryEntry, MoodType, WeatherType, LocationInfo } from '../types/index.ts';
 import { ModalHeader } from './ModalHeader';
 import { ModalShell } from './ModalShell';
@@ -28,19 +28,6 @@ type DiaryFormOption<T extends string> = {
   value: T;
   label: string;
   emoji?: string;
-};
-
-type DiaryFormConfirmDialogProps = {
-  isOpen: boolean;
-  onClose: () => void;
-  ariaLabel: string;
-  title: string;
-  description: ReactNode;
-  cancelLabel: string;
-  confirmLabel: string;
-  onConfirm: () => void;
-  confirmTone: 'primary' | 'accent';
-  theme: ThemeConfig;
 };
 
 type DiaryFormSelectWithCustomFieldProps = {
@@ -78,8 +65,6 @@ const weathers: DiaryFormOption<WeatherType>[] = [
   { value: 'unknown', label: '未知' },
 ];
 
-const DIARY_FORM_DRAFT_KEY = 'diary_form_draft';
-
 type DiaryFormSnapshot = {
   title: string;
   content: string;
@@ -91,10 +76,6 @@ type DiaryFormSnapshot = {
   images: string[];
   location: LocationInfo | null;
   tags: string[];
-};
-
-type DiaryFormDraft = DiaryFormSnapshot & {
-  updatedAt: string;
 };
 
 function createEmptySnapshot(): DiaryFormSnapshot {
@@ -112,13 +93,6 @@ function createEmptySnapshot(): DiaryFormSnapshot {
   };
 }
 
-function formatDraftTime(value: string) {
-  return new Date(value).toLocaleTimeString('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 function getFormControlStyle(theme: ThemeConfig): CSSProperties {
   return {
     backgroundColor: theme.colors.surface,
@@ -134,54 +108,6 @@ function getSecondaryButtonStyle(theme: ThemeConfig): CSSProperties {
     border: `1px solid ${theme.colors.border}`,
     backgroundColor: theme.colors.surface,
   };
-}
-
-function getStatusPillStyle(theme: ThemeConfig, tone: 'saving' | 'dirty' | 'saved'): CSSProperties {
-  if (tone === 'dirty') {
-    return {
-      backgroundColor: 'rgba(245, 158, 11, 0.12)',
-      border: '1px solid rgba(245, 158, 11, 0.28)',
-      color: '#b45309',
-    };
-  }
-
-  if (tone === 'saving') {
-    return {
-      backgroundColor: `${theme.colors.primary}16`,
-      border: `1px solid ${theme.colors.primary}33`,
-      color: theme.colors.primary,
-    };
-  }
-
-  return {
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    border: '1px solid rgba(16, 185, 129, 0.28)',
-    color: '#047857',
-  };
-}
-
-function buildSnapshot(input: DiaryFormSnapshot) {
-  return JSON.stringify({
-    ...input,
-    title: input.title.trim(),
-    content: input.content.trim(),
-    customMood: input.customMood.trim(),
-    customWeather: input.customWeather.trim(),
-    images: [...input.images],
-    tags: [...input.tags],
-  });
-}
-
-function hasMeaningfulDraft(input: DiaryFormSnapshot) {
-  return Boolean(
-    input.title.trim() ||
-    input.content.trim() ||
-    input.customMood.trim() ||
-    input.customWeather.trim() ||
-    input.images.length > 0 ||
-    input.location ||
-    input.tags.length > 0
-  );
 }
 
 function shouldShowAdvancedOptions(snapshot: DiaryFormSnapshot) {
@@ -234,96 +160,6 @@ function createSnapshotFromEntry(entry: DiaryEntry): DiaryFormSnapshot {
 
 function resolveSubmittedValue(value: string, customValue: string) {
   return value === 'custom' ? customValue.trim() : value;
-}
-
-function readStoredDraft(): DiaryFormDraft | null {
-  try {
-    const raw = localStorage.getItem(DIARY_FORM_DRAFT_KEY);
-    if (!raw) {
-      return null;
-    }
-
-    const parsed = JSON.parse(raw) as Partial<DiaryFormDraft>;
-    if (!parsed || typeof parsed !== 'object') {
-      return null;
-    }
-
-    const normalizedDraft: DiaryFormDraft = {
-      title: typeof parsed.title === 'string' ? parsed.title : '',
-      content: typeof parsed.content === 'string' ? parsed.content : '',
-      contentType: parsed.contentType === 'plain' ? 'plain' : 'markdown',
-      mood: typeof parsed.mood === 'string' ? parsed.mood : 'neutral',
-      weather: typeof parsed.weather === 'string' ? parsed.weather : 'unknown',
-      customMood: typeof parsed.customMood === 'string' ? parsed.customMood : '',
-      customWeather: typeof parsed.customWeather === 'string' ? parsed.customWeather : '',
-      images: Array.isArray(parsed.images) ? parsed.images.filter((item): item is string => typeof item === 'string') : [],
-      location: parsed.location && typeof parsed.location === 'object' ? parsed.location as LocationInfo : null,
-      tags: Array.isArray(parsed.tags) ? parsed.tags.filter((item): item is string => typeof item === 'string') : [],
-      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
-    };
-
-    return normalizedDraft;
-  } catch {
-    return null;
-  }
-}
-
-function DiaryFormConfirmDialog({
-  isOpen,
-  onClose,
-  ariaLabel,
-  title,
-  description,
-  cancelLabel,
-  confirmLabel,
-  onConfirm,
-  confirmTone,
-  theme,
-}: DiaryFormConfirmDialogProps) {
-  return (
-    <ModalShell
-      isOpen={isOpen}
-      onClose={onClose}
-      ariaLabel={ariaLabel}
-      zIndex={60}
-      panelClassName="w-full max-w-md rounded-xl"
-      panelStyle={{
-        backgroundColor: theme.colors.surface,
-        border: `1px solid ${theme.colors.border}`,
-      }}
-      backdropStyle={{ backgroundColor: 'rgba(0, 0, 0, 0.4)' }}
-    >
-      <div className="space-y-4 p-6">
-        <div>
-          <h3 className="text-lg font-semibold" style={{ color: theme.colors.text }}>
-            {title}
-          </h3>
-          <div className="mt-2 text-sm leading-6" style={{ color: theme.colors.textSecondary }}>
-            {description}
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg px-4 py-2 transition-colors"
-            style={getSecondaryButtonStyle(theme)}
-          >
-            {cancelLabel}
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="rounded-lg px-4 py-2 font-medium text-white transition-opacity hover:opacity-90"
-            style={{ backgroundColor: confirmTone === 'accent' ? theme.colors.accent : theme.colors.primary }}
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </div>
-    </ModalShell>
-  );
 }
 
 function DiaryFormSelectWithCustomField({
@@ -401,34 +237,8 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
   const [loading, setLoading] = useState(false);
   const isMobile = useIsMobile();
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
-  const [draftToRestore, setDraftToRestore] = useState<DiaryFormDraft | null>(null);
-  const [showRestoreDraftPrompt, setShowRestoreDraftPrompt] = useState(false);
-  const [showDraftRestoredNotice, setShowDraftRestoredNotice] = useState(false);
-  const [lastDraftSavedAt, setLastDraftSavedAt] = useState<string | null>(null);
-  const [showDraftSavedNotice, setShowDraftSavedNotice] = useState(false);
-  const [showResetDraftConfirm, setShowResetDraftConfirm] = useState(false);
-  const initialSnapshotRef = React.useRef<string>('');
-  const lastSavedDraftSnapshotRef = React.useRef<string>('');
   const controlStyle = getFormControlStyle(theme);
   const secondaryButtonStyle = getSecondaryButtonStyle(theme);
-
-  const clearStoredDraft = () => {
-    localStorage.removeItem(DIARY_FORM_DRAFT_KEY);
-  };
-
-  const getCurrentSnapshot = (): DiaryFormSnapshot => ({
-    title,
-    content,
-    contentType,
-    mood,
-    weather,
-    customMood,
-    customWeather,
-    images,
-    location,
-    tags,
-  });
 
   const applySnapshot = (snapshot: DiaryFormSnapshot) => {
     setTitle(snapshot.title);
@@ -456,168 +266,17 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
     applySnapshot(nextFormSnapshot);
 
     setTagInput('');
-    setShowDiscardConfirm(false);
-    setShowRestoreDraftPrompt(false);
-    setDraftToRestore(null);
-    setShowDraftRestoredNotice(false);
-    setShowDraftSavedNotice(false);
-    setShowResetDraftConfirm(false);
-    setLastDraftSavedAt(null);
-    initialSnapshotRef.current = buildSnapshot(nextFormSnapshot);
-    lastSavedDraftSnapshotRef.current = '';
-
-    if (!entry) {
-      const storedDraft = readStoredDraft();
-      if (storedDraft && hasMeaningfulDraft(storedDraft)) {
-        setDraftToRestore(storedDraft);
-        setLastDraftSavedAt(storedDraft.updatedAt);
-        lastSavedDraftSnapshotRef.current = buildSnapshot(storedDraft);
-        setShowRestoreDraftPrompt(true);
-      }
-    }
   }, [entry, isOpen]);
 
   useBodyScrollLock(isOpen);
 
-  const hasUnsavedChanges = initialSnapshotRef.current !== buildSnapshot(getCurrentSnapshot());
-  const formStatus = loading
-    ? { label: '正在保存...', tone: 'saving' as const }
-    : hasUnsavedChanges
-      ? { label: '有未保存改动', tone: 'dirty' as const }
-      : !entry && lastDraftSavedAt
-        ? { label: `本地草稿已于 ${formatDraftTime(lastDraftSavedAt)} 保存`, tone: 'saved' as const }
-        : null;
-
-  useEffect(() => {
-    if (!isOpen || !hasUnsavedChanges || loading) {
-      return;
-    }
-
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasUnsavedChanges, isOpen, loading]);
-
-  useEffect(() => {
-    if (!isOpen || entry || loading || showRestoreDraftPrompt) {
-      return;
-    }
-
-    const snapshot = getCurrentSnapshot();
-    if (!hasMeaningfulDraft(snapshot)) {
-      clearStoredDraft();
-      setLastDraftSavedAt(null);
-      lastSavedDraftSnapshotRef.current = '';
-      return;
-    }
-
-    const currentSnapshot = buildSnapshot(snapshot);
-    if (currentSnapshot === lastSavedDraftSnapshotRef.current) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      const draft: DiaryFormDraft = {
-        ...snapshot,
-        updatedAt: new Date().toISOString(),
-      };
-
-      localStorage.setItem(DIARY_FORM_DRAFT_KEY, JSON.stringify(draft));
-      lastSavedDraftSnapshotRef.current = currentSnapshot;
-      setLastDraftSavedAt(draft.updatedAt);
-      setShowDraftSavedNotice(true);
-    }, 400);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [content, contentType, customMood, customWeather, entry, images, isOpen, loading, location, mood, showRestoreDraftPrompt, tags, title, weather]);
-
-  const requestClose = () => {
+  const handleClose = () => {
     if (loading) {
       return;
     }
 
-    if (hasUnsavedChanges) {
-      setShowDiscardConfirm(true);
-      return;
-    }
-
     onCancel();
   };
-
-  const handleDiscardChanges = () => {
-    setShowDiscardConfirm(false);
-    if (!entry) {
-      clearStoredDraft();
-    }
-    onCancel();
-  };
-
-  const handleRestoreDraft = () => {
-    if (!draftToRestore) {
-      return;
-    }
-
-    applySnapshot(draftToRestore);
-    initialSnapshotRef.current = buildSnapshot(draftToRestore);
-    lastSavedDraftSnapshotRef.current = buildSnapshot(draftToRestore);
-    setShowRestoreDraftPrompt(false);
-    setShowDraftRestoredNotice(true);
-    setLastDraftSavedAt(draftToRestore.updatedAt);
-  };
-
-  const handleDiscardStoredDraft = () => {
-    clearStoredDraft();
-    setDraftToRestore(null);
-    setShowRestoreDraftPrompt(false);
-    setLastDraftSavedAt(null);
-    lastSavedDraftSnapshotRef.current = '';
-  };
-
-  const handleResetDraft = () => {
-    const emptySnapshot = createEmptySnapshot();
-    clearStoredDraft();
-    applySnapshot(emptySnapshot);
-    setTagInput('');
-    setDraftToRestore(null);
-    setShowRestoreDraftPrompt(false);
-    setShowDraftRestoredNotice(false);
-    setShowDraftSavedNotice(false);
-    setLastDraftSavedAt(null);
-    initialSnapshotRef.current = buildSnapshot(emptySnapshot);
-    lastSavedDraftSnapshotRef.current = '';
-  };
-
-  const requestResetDraft = () => {
-    setShowResetDraftConfirm(true);
-  };
-
-  useEffect(() => {
-    if (!showDraftRestoredNotice) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setShowDraftRestoredNotice(false);
-    }, 2600);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [showDraftRestoredNotice]);
-
-  useEffect(() => {
-    if (!showDraftSavedNotice) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setShowDraftSavedNotice(false);
-    }, 1800);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [showDraftSavedNotice]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -635,12 +294,6 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
         location,
         tags,
       });
-
-      if (!entry) {
-        clearStoredDraft();
-        setLastDraftSavedAt(null);
-        lastSavedDraftSnapshotRef.current = '';
-      }
     } finally {
       setLoading(false);
     }
@@ -724,7 +377,7 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
   return (
     <ModalShell
       isOpen={isOpen}
-      onClose={requestClose}
+      onClose={handleClose}
       ariaLabelledby="diary-form-title"
       initialFocusRef={titleInputRef}
       zIndex={50}
@@ -734,7 +387,7 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
         overflow: 'hidden',
         overscrollBehavior: 'contain'
       }}
-      panelClassName={`${isMobile ? 'max-w-full rounded-lg' : 'max-w-4xl rounded-xl'} ${theme.effects.blur} w-full overflow-hidden shadow-2xl`}
+      panelClassName={`${isMobile ? 'max-w-full rounded-[1.4rem]' : 'max-w-4xl rounded-xl'} ${theme.effects.blur} w-full overflow-hidden shadow-2xl`}
       panelStyle={{
         backgroundColor: theme.colors.background,
         overscrollBehavior: 'contain',
@@ -748,47 +401,16 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
       <ModalHeader
         titleId="diary-form-title"
         title={entry ? '编辑日记' : '写新日记'}
-        onClose={requestClose}
+        onClose={handleClose}
         padded={isMobile ? 'sm' : 'lg'}
       />
 
       <form
         ref={formRef}
         onSubmit={handleSubmit}
-        className={`${isMobile ? 'space-y-4 p-4 pb-6' : 'space-y-6 p-6'} flex-1 overflow-y-auto`}
+        className={`${isMobile ? 'space-y-3 p-3 pb-5' : 'space-y-6 p-6'} flex-1 overflow-y-auto`}
+        style={{ scrollPaddingBottom: isMobile ? '7rem' : undefined }}
       >
-          {(showDraftRestoredNotice || (showDraftSavedNotice && lastDraftSavedAt)) && (
-            <div
-              className="rounded-xl px-4 py-3 text-sm"
-              style={{
-                backgroundColor: `${theme.colors.primary}14`,
-                border: `1px solid ${theme.colors.primary}33`,
-                color: theme.colors.primary,
-              }}
-            >
-              <div>
-                {showDraftRestoredNotice
-                  ? '已恢复上次未提交的本地草稿，可以继续编辑或直接保存。'
-                  : '内容已自动保存到本地草稿。'}
-              </div>
-              {lastDraftSavedAt && (
-                <div className="mt-1 text-xs opacity-80">
-                  最近保存时间：{new Date(lastDraftSavedAt).toLocaleString('zh-CN')}
-                </div>
-              )}
-              {!entry && lastDraftSavedAt && (
-                <button
-                  type="button"
-                  onClick={requestResetDraft}
-                  className="mt-3 text-xs font-medium transition-opacity hover:opacity-80"
-                  style={{ color: theme.colors.accent }}
-                >
-                  清空本地草稿并重置表单
-                </button>
-              )}
-            </div>
-          )}
-
           {/* Title - Optional */}
           <div>
             <label
@@ -826,7 +448,7 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
             >
               内容格式
             </label>
-            <div className="flex gap-2">
+            <div className={`grid gap-2 ${isMobile ? 'grid-cols-2' : 'grid-cols-[auto_auto]'}`}>
               <button
                 type="button"
                 onClick={() => setContentType('markdown')}
@@ -1032,24 +654,21 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
 
           {/* Actions */}
           <div
-            className={`flex ${isMobile ? 'sticky bottom-0 -mx-4 flex-col gap-2 px-4 pb-[calc(0.75rem+var(--safe-area-bottom,0px))] pt-3' : 'justify-end gap-3 pt-4'}`}
+            className={`flex ${isMobile ? 'sticky bottom-0 -mx-3 flex-wrap gap-2 px-3 pb-[calc(0.75rem+var(--safe-area-bottom,0px))] pt-3' : 'justify-end gap-3 pt-4'}`}
             style={{
               borderTop: `1px solid ${theme.colors.border}`,
-              backgroundColor: isMobile ? theme.colors.background : 'transparent',
+              backgroundColor: isMobile
+                ? theme.mode === 'dark'
+                  ? 'rgba(10, 18, 28, 0.95)'
+                  : 'rgba(248, 250, 252, 0.95)'
+                : 'transparent',
+              backdropFilter: isMobile ? 'blur(14px)' : undefined,
             }}
           >
-            {formStatus && (
-              <div
-                className={`${isMobile ? 'order-first w-full' : 'mr-auto'} inline-flex items-center rounded-full px-3 py-2 text-sm`}
-                style={getStatusPillStyle(theme, formStatus.tone)}
-              >
-                {formStatus.label}
-              </div>
-            )}
             <button
               type="button"
-              onClick={requestClose}
-              className={`${isMobile ? 'w-full py-3' : 'px-4 py-2'} rounded-md transition-colors`}
+              onClick={handleClose}
+              className={`${isMobile ? 'min-w-0 flex-1 py-3' : 'px-4 py-2'} rounded-md transition-colors`}
               style={secondaryButtonStyle}
             >
               取消
@@ -1057,7 +676,7 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
             <button
               type="submit"
               disabled={loading || !content.trim()}
-              className={`${isMobile ? 'w-full py-3' : 'px-6 py-3'} rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 ${!isMobile ? 'hover:scale-105' : ''}`}
+              className={`${isMobile ? 'min-w-0 flex-[1.2] py-3' : 'px-6 py-3'} rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2 ${!isMobile ? 'hover:scale-105' : ''}`}
               style={{
                 backgroundColor: theme.colors.primary,
                 color: 'white'
@@ -1067,52 +686,6 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
             </button>
           </div>
       </form>
-
-      <DiaryFormConfirmDialog
-        isOpen={showDiscardConfirm}
-        onClose={() => setShowDiscardConfirm(false)}
-        ariaLabel="放弃未保存改动确认"
-        title="放弃未保存改动？"
-        description="你刚刚修改的内容还没有保存，关闭后这些改动会丢失。"
-        cancelLabel="继续编辑"
-        confirmLabel="放弃改动"
-        onConfirm={handleDiscardChanges}
-        confirmTone="accent"
-        theme={theme}
-      />
-
-      <DiaryFormConfirmDialog
-        isOpen={showRestoreDraftPrompt && Boolean(draftToRestore)}
-        onClose={handleDiscardStoredDraft}
-        ariaLabel="恢复本地草稿确认"
-        title="恢复上次未完成的草稿？"
-        description={
-          draftToRestore
-            ? `检测到一份未提交的本地草稿，保存时间为 ${new Date(draftToRestore.updatedAt).toLocaleString('zh-CN')}。`
-            : ''
-        }
-        cancelLabel="新建空白"
-        confirmLabel="恢复草稿"
-        onConfirm={handleRestoreDraft}
-        confirmTone="primary"
-        theme={theme}
-      />
-
-      <DiaryFormConfirmDialog
-        isOpen={showResetDraftConfirm}
-        onClose={() => setShowResetDraftConfirm(false)}
-        ariaLabel="清空本地草稿确认"
-        title="清空本地草稿？"
-        description="这会删除当前本地草稿，并将表单恢复为空白状态。这个操作不能撤销。"
-        cancelLabel="取消"
-        confirmLabel="确认清空"
-        onConfirm={() => {
-          setShowResetDraftConfirm(false);
-          handleResetDraft();
-        }}
-        confirmTone="accent"
-        theme={theme}
-      />
     </ModalShell>
   );
 }

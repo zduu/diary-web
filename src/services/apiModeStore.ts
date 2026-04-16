@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import { LocalDataStore } from './localDataStore.ts';
 
 type EnvValueGetter = (key: 'MODE' | 'VITE_USE_MOCK_API') => string | undefined;
 
@@ -10,6 +11,13 @@ export class ApiModeStore {
   private static readonly SETTINGS_STORAGE_KEY = 'diary_app_settings';
   private static readonly APP_AUTH_KEY = 'diary-app-authenticated';
   private static readonly ADMIN_AUTH_KEY = 'diary-admin-authenticated';
+  private readonly localDataStore = new LocalDataStore({
+    entries: ApiModeStore.ENTRY_STORAGE_KEY,
+    settings: ApiModeStore.SETTINGS_STORAGE_KEY,
+    appAuth: ApiModeStore.APP_AUTH_KEY,
+    adminAuth: ApiModeStore.ADMIN_AUTH_KEY,
+    disableDefaults: ApiModeStore.DISABLE_DEFAULTS_KEY,
+  });
 
   private isNativeAppRuntime(): boolean {
     if (typeof window === 'undefined') {
@@ -55,19 +63,11 @@ export class ApiModeStore {
   }
 
   clearLocalData(): void {
-    localStorage.removeItem(ApiModeStore.ENTRY_STORAGE_KEY);
-    localStorage.removeItem(ApiModeStore.SETTINGS_STORAGE_KEY);
-    localStorage.removeItem(ApiModeStore.APP_AUTH_KEY);
-    localStorage.removeItem(ApiModeStore.ADMIN_AUTH_KEY);
-    localStorage.setItem(ApiModeStore.DISABLE_DEFAULTS_KEY, 'true');
+    void this.localDataStore.clearCoreData();
+    void this.localDataStore.setDefaultDataEnabled(false);
   }
 
   setDefaultDataEnabled(enabled: boolean): void {
-    if (enabled) {
-      localStorage.removeItem(ApiModeStore.DISABLE_DEFAULTS_KEY);
-      return;
-    }
-
-    localStorage.setItem(ApiModeStore.DISABLE_DEFAULTS_KEY, 'true');
+    void this.localDataStore.setDefaultDataEnabled(enabled);
   }
 }

@@ -69,14 +69,14 @@ export function AppHeader({
   return (
     <header className="sticky top-0 z-30 border-b border-transparent">
       <div
-        className={`mx-auto max-w-6xl ${isMobile ? 'px-4 pt-3' : 'px-4 pt-4 md:px-6'}`}
-        style={{ paddingTop: isMobile ? 'max(0.75rem, var(--safe-area-top))' : undefined }}
+        className={`mx-auto max-w-6xl ${isMobile ? 'px-3 pt-2.5' : 'px-4 pt-4 md:px-6'}`}
+        style={{ paddingTop: isMobile ? 'max(0.5rem, var(--safe-area-top))' : undefined }}
       >
         <div
-          className={`app-header ${isMobile ? 'rounded-[1.45rem] px-3 py-2.5' : 'rounded-[1.9rem] px-4 py-3 md:px-5 md:py-4'} ${theme.effects.blur}`}
+          className={`app-header ${isMobile ? 'rounded-[1.3rem] px-3 py-2' : 'rounded-[1.9rem] px-4 py-3 md:px-5 md:py-4'} ${theme.effects.blur}`}
           style={shellSurfaceStyle}
         >
-          <div className={`flex ${isMobile ? 'flex-col gap-2.5' : 'flex-col gap-4 md:flex-row md:items-center md:justify-between'}`}>
+          <div className={`flex ${isMobile ? 'flex-col gap-2' : 'flex-col gap-4 md:flex-row md:items-center md:justify-between'}`}>
             <div className={`flex items-center ${isMobile ? 'justify-between gap-3' : 'gap-2 md:gap-4'}`}>
               <div className={`flex min-w-0 items-center ${isMobile ? 'gap-2.5' : 'gap-2 md:gap-4'}`}>
               <div
@@ -93,7 +93,7 @@ export function AppHeader({
                 >
                   我的日记
                 </h1>
-                <p className="hidden text-xs sm:block md:text-sm" style={{ color: theme.colors.textSecondary }}>
+                <p className={`${isMobile ? 'block text-[11px]' : 'hidden text-xs sm:block md:text-sm'}`} style={{ color: theme.colors.textSecondary }}>
                   记录生活，留住美好，也让界面轻一点
                 </p>
               </div>

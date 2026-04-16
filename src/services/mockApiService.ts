@@ -1,5 +1,6 @@
 import type { DiaryEntry, DiaryStats } from '../types/index.ts';
 import type { AdminSettingsResponse, PublicSettingsResponse, SessionState } from './apiTypes.ts';
+import { LocalDataStore } from './localDataStore.ts';
 import {
   createPublicSettingsResponse,
   getPublicBooleanSettingStoredValue,
@@ -58,61 +59,46 @@ export class MockApiService {
   private readonly ADMIN_AUTH_KEY = 'diary-admin-authenticated';
   private readonly MIN_PASSWORD_LENGTH = 6;
   private readonly MAX_PASSWORD_LENGTH = 256;
+  private readonly localDataStore = new LocalDataStore({
+    entries: this.STORAGE_KEY,
+    settings: this.SETTINGS_KEY,
+    appAuth: this.APP_AUTH_KEY,
+    adminAuth: this.ADMIN_AUTH_KEY,
+    disableDefaults: 'diary_disable_defaults',
+  });
 
-  private getStoredEntries(): DiaryEntry[] {
-    try {
-      const data = localStorage.getItem(this.STORAGE_KEY);
-      if (data) {
-        return JSON.parse(data);
-      }
-
-      const disableDefaults = localStorage.getItem('diary_disable_defaults') === 'true';
-      return disableDefaults ? [] : this.getDefaultEntries();
-    } catch {
-      const disableDefaults = localStorage.getItem('diary_disable_defaults') === 'true';
-      return disableDefaults ? [] : this.getDefaultEntries();
-    }
+  private async getStoredEntries(): Promise<DiaryEntry[]> {
+    return this.localDataStore.getEntries(() => this.getDefaultEntries());
   }
 
-  private saveEntries(entries: DiaryEntry[]): void {
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(entries));
+  private async saveEntries(entries: DiaryEntry[]): Promise<void> {
+    await this.localDataStore.saveEntries(entries);
   }
 
-  private getStoredSettings(): Record<string, string> {
-    try {
-      const data = localStorage.getItem(this.SETTINGS_KEY);
-      return data ? JSON.parse(data) : this.getDefaultSettings();
-    } catch {
-      return this.getDefaultSettings();
-    }
+  private async getStoredSettings(): Promise<Record<string, string>> {
+    return this.localDataStore.getSettings(() => this.getDefaultSettings());
   }
 
-  private saveSettings(settings: Record<string, string>): void {
-    localStorage.setItem(this.SETTINGS_KEY, JSON.stringify(settings));
+  private async saveSettings(settings: Record<string, string>): Promise<void> {
+    await this.localDataStore.saveSettings(settings);
   }
 
-  private updateStoredSettings(mutator: (settings: Record<string, string>) => void): void {
-    const settings = this.getStoredSettings();
+  private async updateStoredSettings(mutator: (settings: Record<string, string>) => void): Promise<void> {
+    const settings = await this.getStoredSettings();
     mutator(settings);
-    this.saveSettings(settings);
+    await this.saveSettings(settings);
   }
 
-  private getSessionState(): SessionState {
-    const isAdminAuthenticated = localStorage.getItem(this.ADMIN_AUTH_KEY) === 'true';
-    const isAuthenticated = isAdminAuthenticated || localStorage.getItem(this.APP_AUTH_KEY) === 'true';
-
-    return {
-      isAuthenticated,
-      isAdminAuthenticated,
-    };
+  private async getSessionState(): Promise<SessionState> {
+    return this.localDataStore.getSession();
   }
 
-  private isAdminAuthenticated(): boolean {
-    return this.getSessionState().isAdminAuthenticated;
+  private async isAdminAuthenticated(): Promise<boolean> {
+    return (await this.getSessionState()).isAdminAuthenticated;
   }
 
-  private requireAdminSession(): void {
-    if (!this.isAdminAuthenticated()) {
+  private async requireAdminSession(): Promise<void> {
+    if (!(await this.isAdminAuthenticated())) {
       throw new Error('需要管理员权限');
     }
   }
@@ -125,18 +111,18 @@ export class MockApiService {
     await wait(delayMs);
 
     if (options?.requireAdmin) {
-      this.requireAdminSession();
+      await this.requireAdminSession();
     }
 
     return action();
   }
 
-  private canReadEntry(entry: DiaryEntry): boolean {
-    return this.isAdminAuthenticated() || !entry.hidden;
+  private async canReadEntry(entry: DiaryEntry): Promise<boolean> {
+    return (await this.isAdminAuthenticated()) || !entry.hidden;
   }
 
-  private hasValidStatsApiKey(apiKey?: string): boolean {
-    const configuredApiKey = this.getStoredSettings().stats_api_key?.trim();
+  private async hasValidStatsApiKey(apiKey?: string): Promise<boolean> {
+    const configuredApiKey = (await this.getStoredSettings()).stats_api_key?.trim();
 
     if (!configuredApiKey || !apiKey) {
       return false;
@@ -227,8 +213,8 @@ export class MockApiService {
     };
   }
 
-  private generateId(): number {
-    const entries = this.getStoredEntries();
+  private async generateId(): Promise<number> {
+    const entries = await this.getStoredEntries();
     return Math.max(0, ...entries.map((entry) => entry.id || 0)) + 1;
   }
 
@@ -279,24 +265,32 @@ export class MockApiService {
   }
 
   async getAllEntries(): Promise<DiaryEntry[]> {
-    return this.runMockRequest(100, () => this.getStoredEntries().filter((entry) => this.canReadEntry(entry)));
+    return this.runMockRequest(100, async () => {
+      const entries = await this.getStoredEntries();
+      const readableEntries = await Promise.all(entries.map(async (entry) => ({
+        entry,
+        canRead: await this.canReadEntry(entry),
+      })));
+
+      return readableEntries.filter((item) => item.canRead).map((item) => item.entry);
+    });
   }
 
   async getEntry(id: number): Promise<DiaryEntry | null> {
-    return this.runMockRequest(50, () => {
-      const entries = this.getStoredEntries();
+    return this.runMockRequest(50, async () => {
+      const entries = await this.getStoredEntries();
       const entry = entries.find((item) => item.id === id) || null;
-      return entry && this.canReadEntry(entry) ? entry : null;
+      return entry && await this.canReadEntry(entry) ? entry : null;
     });
   }
 
   async createEntry(entry: Omit<DiaryEntry, 'id' | 'created_at' | 'updated_at'>): Promise<DiaryEntry> {
-    return this.runMockRequest(100, () => {
-      const entries = this.getStoredEntries();
+    return this.runMockRequest(100, async () => {
+      const entries = await this.getStoredEntries();
       const now = new Date().toISOString();
       const newEntry: DiaryEntry = {
         ...entry,
-        id: this.generateId(),
+        id: await this.generateId(),
         created_at: now,
         updated_at: now,
         content_type: entry.content_type || 'markdown',
@@ -309,7 +303,7 @@ export class MockApiService {
       };
 
       entries.unshift(newEntry);
-      this.saveEntries(entries);
+      await this.saveEntries(entries);
       return newEntry;
     }, { requireAdmin: true });
   }
@@ -342,8 +336,8 @@ export class MockApiService {
   }
 
   async updateEntry(id: number, updates: Partial<DiaryEntry>): Promise<DiaryEntry> {
-    return this.runMockRequest(100, () => {
-      const entries = this.getStoredEntries();
+    return this.runMockRequest(100, async () => {
+      const entries = await this.getStoredEntries();
       const index = entries.findIndex((entry) => entry.id === id);
 
       if (index === -1) {
@@ -358,27 +352,27 @@ export class MockApiService {
       };
 
       entries[index] = updatedEntry;
-      this.saveEntries(entries);
+      await this.saveEntries(entries);
       return updatedEntry;
     }, { requireAdmin: true });
   }
 
   async deleteEntry(id: number): Promise<void> {
-    return this.runMockRequest(100, () => {
-      const entries = this.getStoredEntries();
+    return this.runMockRequest(100, async () => {
+      const entries = await this.getStoredEntries();
       const filteredEntries = entries.filter((entry) => entry.id !== id);
 
       if (filteredEntries.length === entries.length) {
         throw new Error('日记不存在');
       }
 
-      this.saveEntries(filteredEntries);
+      await this.saveEntries(filteredEntries);
     }, { requireAdmin: true });
   }
 
   async batchImportEntries(newEntries: DiaryEntry[], options?: { overwrite?: boolean }): Promise<DiaryEntry[]> {
-    return this.runMockRequest(200, () => {
-      const existingEntries = this.getStoredEntries();
+    return this.runMockRequest(200, async () => {
+      const existingEntries = await this.getStoredEntries();
       const importedEntries: DiaryEntry[] = [];
       let nextId = Math.max(0, ...existingEntries.map((entry) => entry.id || 0)) + 1;
 
@@ -396,7 +390,7 @@ export class MockApiService {
 
       if (options?.overwrite) {
         finalEntries = [...importedEntries];
-        localStorage.setItem('diary_disable_defaults', 'true');
+        await this.localDataStore.setDefaultDataEnabled(false);
       } else {
         finalEntries = [...existingEntries, ...importedEntries];
       }
@@ -405,14 +399,14 @@ export class MockApiService {
         new Date(right.created_at || '').getTime() - new Date(left.created_at || '').getTime()
       );
 
-      this.saveEntries(finalEntries);
+      await this.saveEntries(finalEntries);
       return importedEntries;
     }, { requireAdmin: true });
   }
 
   async batchUpdateEntries(updatedEntries: DiaryEntry[]): Promise<DiaryEntry[]> {
-    return this.runMockRequest(200, () => {
-      const entries = this.getStoredEntries();
+    return this.runMockRequest(200, async () => {
+      const entries = await this.getStoredEntries();
       const results: DiaryEntry[] = [];
 
       for (const updatedEntry of updatedEntries) {
@@ -427,22 +421,22 @@ export class MockApiService {
         }
       }
 
-      this.saveEntries(entries);
+      await this.saveEntries(entries);
       return results;
     }, { requireAdmin: true });
   }
 
   async getSetting(key: string): Promise<string | null> {
-    return this.runMockRequest(50, () => {
-      const settings = this.getStoredSettings();
+    return this.runMockRequest(50, async () => {
+      const settings = await this.getStoredSettings();
 
       if (key === 'admin_password_configured') {
-        this.requireAdminSession();
+        await this.requireAdminSession();
         return settings.admin_password ? 'true' : 'false';
       }
 
       if (key === 'app_password_configured') {
-        this.requireAdminSession();
+        await this.requireAdminSession();
         return settings.app_password ? 'true' : 'false';
       }
 
@@ -450,16 +444,16 @@ export class MockApiService {
         return getPublicBooleanSettingStoredValue(settings, key);
       }
 
-      this.requireAdminSession();
+      await this.requireAdminSession();
       return settings[key] ?? null;
     });
   }
 
   async setSetting(key: string, value: string): Promise<void> {
-    return this.runMockRequest(50, () => {
+    return this.runMockRequest(50, async () => {
       if (key === 'admin_password') {
         const trimmedValue = this.validatePasswordLength(value, '管理员密码');
-        this.updateStoredSettings((settings) => {
+        await this.updateStoredSettings((settings) => {
           settings.admin_password = trimmedValue;
         });
         return;
@@ -467,7 +461,7 @@ export class MockApiService {
 
       if (key === 'app_password') {
         const trimmedValue = this.validatePasswordLength(value, '应用密码');
-        this.updateStoredSettings((settings) => {
+        await this.updateStoredSettings((settings) => {
           settings.app_password = trimmedValue;
         });
         return;
@@ -481,7 +475,7 @@ export class MockApiService {
         throw new Error('布尔设置仅允许 true 或 false');
       }
 
-      this.updateStoredSettings((settings) => {
+      await this.updateStoredSettings((settings) => {
         if (key === 'app_password_enabled' && value === 'true' && !settings.app_password?.trim()) {
           throw new Error('请先设置应用访问密码，再开启访问保护');
         }
@@ -492,13 +486,17 @@ export class MockApiService {
   }
 
   async login(scope: 'app' | 'admin', password: string): Promise<SessionState> {
-    return this.runMockRequest(80, () => {
-      const settings = this.getStoredSettings();
+    return this.runMockRequest(80, async () => {
+      const settings = await this.getStoredSettings();
 
       if (scope === 'app') {
         if (settings.app_password_enabled !== 'true' || password === settings.app_password) {
-          localStorage.setItem(this.APP_AUTH_KEY, 'true');
-          return this.getSessionState();
+          const session: SessionState = {
+            isAuthenticated: true,
+            isAdminAuthenticated: false,
+          };
+          await this.localDataStore.saveSession(session);
+          return session;
         }
 
         throw new Error('访问密码错误');
@@ -508,16 +506,18 @@ export class MockApiService {
         throw new Error('管理员密码错误');
       }
 
-      localStorage.setItem(this.APP_AUTH_KEY, 'true');
-      localStorage.setItem(this.ADMIN_AUTH_KEY, 'true');
-      return this.getSessionState();
+      const session: SessionState = {
+        isAuthenticated: true,
+        isAdminAuthenticated: true,
+      };
+      await this.localDataStore.saveSession(session);
+      return session;
     });
   }
 
   async logout(): Promise<void> {
-    return this.runMockRequest(50, () => {
-      localStorage.removeItem(this.APP_AUTH_KEY);
-      localStorage.removeItem(this.ADMIN_AUTH_KEY);
+    return this.runMockRequest(50, async () => {
+      await this.localDataStore.clearSession();
     });
   }
 
@@ -526,12 +526,12 @@ export class MockApiService {
   }
 
   async getPublicSettings(): Promise<PublicSettingsResponse> {
-    return this.runMockRequest(50, () => createPublicSettingsResponse(this.getStoredSettings()));
+    return this.runMockRequest(50, async () => createPublicSettingsResponse(await this.getStoredSettings()));
   }
 
   async getAdminSettings(): Promise<AdminSettingsResponse> {
-    return this.runMockRequest(50, () => {
-      const settings = this.getStoredSettings();
+    return this.runMockRequest(50, async () => {
+      const settings = await this.getStoredSettings();
       const publicSettings = createPublicSettingsResponse(settings);
 
       return {
@@ -543,14 +543,15 @@ export class MockApiService {
   }
 
   async getStats(apiKey?: string): Promise<DiaryStats> {
-    return this.runMockRequest(100, () => {
-      const hasApiKey = this.hasValidStatsApiKey(apiKey);
+    return this.runMockRequest(100, async () => {
+      const hasApiKey = await this.hasValidStatsApiKey(apiKey);
+      const isAdminAuthenticated = await this.isAdminAuthenticated();
 
-      if (!this.isAdminAuthenticated() && !hasApiKey) {
+      if (!isAdminAuthenticated && !hasApiKey) {
         throw new Error('需要管理员会话或有效的统计 API 密钥');
       }
 
-      const entries = this.getStoredEntries().filter((entry) => this.isAdminAuthenticated() || hasApiKey || !entry.hidden);
+      const entries = (await this.getStoredEntries()).filter((entry) => isAdminAuthenticated || hasApiKey || !entry.hidden);
       const { consecutive_days, current_streak_start } = this.calculateConsecutiveDays(entries);
       const total_days_with_entries = this.calculateTotalDaysWithEntries(entries);
       const total_entries = entries.length;

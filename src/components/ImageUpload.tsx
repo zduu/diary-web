@@ -4,6 +4,7 @@ import { useThemeContext } from './ThemeProvider';
 import { NotificationToast } from './NotificationToast';
 import { apiService } from '../services/api';
 import { useNotificationState } from '../hooks/useNotificationState';
+import { useIsMobile } from '../hooks/useIsMobile';
 import { debugError } from '../utils/logger.ts';
 
 interface ImageUploadProps {
@@ -14,6 +15,7 @@ interface ImageUploadProps {
 
 export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUploadProps) {
   const { theme } = useThemeContext();
+  const isMobile = useIsMobile();
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -92,10 +94,12 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
   };
 
   return (
-    <div className="space-y-4">
+    <div className={isMobile ? 'space-y-3' : 'space-y-4'}>
       {/* 上传区域 */}
       <div
-        className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 cursor-pointer ${
+        className={`relative border-2 border-dashed text-center transition-all duration-200 cursor-pointer ${
+          isMobile ? 'rounded-2xl p-4' : 'rounded-lg p-6'
+        } ${
           dragOver ? 'border-blue-400 bg-blue-50' : ''
         }`}
         style={{
@@ -126,10 +130,10 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
         ) : (
           <div className="flex flex-col items-center">
             <Upload className="w-8 h-8 mb-2" style={{ color: theme.colors.primary }} />
-            <p style={{ color: theme.colors.text }}>
+            <p className={isMobile ? 'text-sm' : undefined} style={{ color: theme.colors.text }}>
               拖拽图片到这里，或点击选择文件
             </p>
-            <p className="text-sm mt-1" style={{ color: theme.colors.textSecondary }}>
+            <p className={`${isMobile ? 'text-xs' : 'text-sm'} mt-1`} style={{ color: theme.colors.textSecondary }}>
               支持 JPG、PNG、GIF 格式，单个文件不超过 5MB
             </p>
             <p className="text-xs mt-1" style={{ color: theme.colors.textSecondary }}>
@@ -141,7 +145,7 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
 
       {/* 图片预览 */}
       {images.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className={`grid ${isMobile ? 'grid-cols-2 gap-3' : 'grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4'}`}>
           {images.map((imageUrl, index) => (
             <div key={index} className="relative group">
               <div 
@@ -161,7 +165,10 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
                   e.stopPropagation();
                   removeImage(index);
                 }}
-                className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-600"
+                className={`absolute -top-2 -right-2 bg-red-500 text-white rounded-full flex items-center justify-center transition-opacity duration-200 hover:bg-red-600 ${
+                  isMobile ? 'h-7 w-7 opacity-100' : 'h-6 w-6 opacity-0 group-hover:opacity-100'
+                }`}
+                aria-label={`删除第 ${index + 1} 张图片`}
               >
                 <X className="w-4 h-4" />
               </button>
