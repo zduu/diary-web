@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { ModalShell } from './ModalShell';
 
 interface ImageViewerProps {
   images: string[];
@@ -51,14 +52,29 @@ export function ImageViewer({ images, initialIndex, isOpen, onClose }: ImageView
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* 背景遮罩 */}
-      <div 
-        className="absolute inset-0 bg-black bg-opacity-80 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      
-      {/* 图片容器 */}
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      zIndex={100010}
+      padding="0"
+      backdropStyle={{
+        backgroundColor: 'rgba(0, 0, 0, 0.82)',
+        backdropFilter: 'blur(6px)',
+      }}
+      panelClassName="relative flex items-center justify-center"
+      panelStyle={{
+        maxWidth: isMobile ? '100vw' : '90vw',
+        maxHeight: isMobile ? '100dvh' : '90vh',
+        width: isMobile ? '100vw' : undefined,
+        background: 'transparent',
+        border: 'none',
+        boxShadow: 'none',
+        paddingTop: isMobile ? 'max(16px, var(--safe-area-top))' : undefined,
+        paddingBottom: isMobile ? 'max(16px, var(--safe-area-bottom))' : undefined,
+        paddingLeft: isMobile ? 'max(12px, var(--safe-area-left))' : undefined,
+        paddingRight: isMobile ? 'max(12px, var(--safe-area-right))' : undefined,
+      }}
+    >
       <div
         className="relative flex items-center justify-center"
         style={{
@@ -121,6 +137,6 @@ export function ImageViewer({ images, initialIndex, isOpen, onClose }: ImageView
           </div>
         )}
       </div>
-    </div>
+    </ModalShell>
   );
 }

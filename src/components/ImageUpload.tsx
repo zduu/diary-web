@@ -21,6 +21,7 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
   const [dragOver, setDragOver] = useState(false);
   const { hideNotification, notification, showNotification } = useNotificationState();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isEmbeddedImageUrl = (value: string) => value.startsWith('data:image/');
 
   const handleFileSelect = useCallback(async (files: FileList) => {
     if (images.length >= maxImages) {
@@ -58,7 +59,11 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
       }
 
       onImagesChange([...images, ...uploadedUrls]);
-      showNotification(`成功上传 ${uploadedUrls.length} 张图片`, 'success');
+      if (uploadedUrls.some(isEmbeddedImageUrl)) {
+        showNotification(`已保存 ${uploadedUrls.length} 张图片到当前日记，未同步到 R2`, 'success');
+      } else {
+        showNotification(`成功上传 ${uploadedUrls.length} 张图片`, 'success');
+      }
     } catch (error) {
       debugError('上传失败:', error);
       showNotification(error instanceof Error ? error.message : '图片上传失败，请重试', 'error');
