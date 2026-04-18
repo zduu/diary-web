@@ -15,7 +15,7 @@
 - Pages 项目已绑定 D1：变量名为 `DB`。
 - 已配置 `SESSION_SECRET`。
 - 已按需配置 `ADMIN_BOOTSTRAP_PASSWORD`、`APP_BOOTSTRAP_PASSWORD`、`STATS_API_KEY`。
-- 如启用图片上传，已配置 `IMAGES_ACCOUNT_ID` 与 `IMAGES_API_TOKEN`，并确认交付域名可访问。
+- 如启用图片上传，已优先绑定 R2 bucket：`IMAGES_BUCKET`；如仍使用旧版方案，已配置 `IMAGES_ACCOUNT_ID` 与 `IMAGES_API_TOKEN`，并确认交付域名可访问。
 - `wrangler.toml` 中的变量与线上项目保持一致，不依赖本地临时值。
 - 如本机已登录 wrangler，已执行 `npm run check:cloudflare:remote` 验证 Pages 项目与 D1 远端存在性。
 

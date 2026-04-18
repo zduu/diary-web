@@ -9,6 +9,7 @@ import type { PublicBooleanSettingKey } from '../../src/services/publicSettingsS
 
 export interface Env {
   DB: D1Database;
+  IMAGES_BUCKET?: R2Bucket;
   ENVIRONMENT?: string;
   APP_TIMEZONE?: string;
   SESSION_SECRET?: string;

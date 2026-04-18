@@ -102,7 +102,7 @@ wrangler.toml.bak
 # Database
 *.db
 *.sqlite
-
+task.md
 # Test files
 test-results/
 playwright-report/

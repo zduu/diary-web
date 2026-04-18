@@ -8,11 +8,16 @@ binding = "DB"
 database_name = "diary-db"
 database_id = "d06caa21-556e-477f-bf86-959dd894e047"
 
+# Recommended for image uploads:
+# [[r2_buckets]]
+# binding = "IMAGES_BUCKET"
+# bucket_name = "your-images-bucket"
+
 [vars]
 ENVIRONMENT = "production"
 APP_TIMEZONE = "Asia/Shanghai"
 IMAGES_VARIANT = "public"
-# Optional:
+# Legacy Cloudflare Images fallback:
 # IMAGES_ACCOUNT_ID = "your-cloudflare-account-id"
 # IMAGES_DELIVERY_URL = "https://imagedelivery.net/your_hash"
 
@@ -21,4 +26,5 @@ IMAGES_VARIANT = "public"
 # wrangler secret put ADMIN_BOOTSTRAP_PASSWORD
 # wrangler secret put APP_BOOTSTRAP_PASSWORD
 # wrangler secret put STATS_API_KEY
+# Legacy fallback only:
 # wrangler secret put IMAGES_API_TOKEN

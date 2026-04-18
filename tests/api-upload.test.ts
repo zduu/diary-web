@@ -1,8 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { onRequestGet as getImage } from '../functions/api/images/[key].ts';
 import { onRequestPost as uploadImage } from '../functions/api/uploads/image.ts';
 import { createSessionToken } from '../functions/api/_shared.ts';
+
+class MockR2Bucket {
+  private readonly store = new Map<string, { body: Uint8Array; contentType?: string }>();
+
+  async put(key: string, value: BodyInit | ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }) {
+    const buffer = await new Response(value as BodyInit).arrayBuffer();
+    this.store.set(key, {
+      body: new Uint8Array(buffer),
+      contentType: options?.httpMetadata?.contentType,
+    });
+  }
+
+  async get(key: string) {
+    const stored = this.store.get(key);
+    if (!stored) {
+      return null;
+    }
+
+    return {
+      body: stored.body,
+      size: stored.body.byteLength,
+      httpEtag: 'test-etag',
+      httpMetadata: {
+        contentType: stored.contentType,
+      },
+    };
+  }
+}
 
 function createEnv(overrides: Record<string, unknown> = {}) {
   return {
@@ -84,6 +113,42 @@ test('image upload validates file type', async () => {
   assert.equal(response.status, 400);
 });
 
+test('image upload stores file in r2 and returns local image URL when bucket binding exists', async () => {
+  const bucket = new MockR2Bucket();
+  const env = createEnv({
+    IMAGES_BUCKET: bucket,
+  });
+  const adminCookie = await buildSessionCookie('admin', env);
+
+  const response = await uploadImage({
+    request: buildImageUploadRequest(adminCookie, new File(['fake-image-data'], 'a.png', { type: 'image/png' })),
+    env,
+  });
+
+  assert.equal(response.status, 200);
+
+  const payload = await parseJson<{ success: boolean; data?: { url: string } }>(response);
+  assert.equal(payload.success, true);
+  assert.match(payload.data?.url ?? '', /^https:\/\/example\.com\/api\/images\/diary%2Fimage-/);
+
+  const key = payload.data?.url
+    ? decodeURIComponent(payload.data.url.split('/').pop() ?? '')
+    : undefined;
+  assert.ok(key);
+
+  const imageResponse = await getImage({
+    params: { key },
+    env,
+  });
+
+  assert.equal(imageResponse.status, 200);
+  assert.equal(imageResponse.headers.get('Content-Type'), 'image/png');
+  assert.equal(imageResponse.headers.get('Cache-Control'), 'public, max-age=31536000, immutable');
+
+  const imageBuffer = new Uint8Array(await imageResponse.arrayBuffer());
+  assert.equal(new TextDecoder().decode(imageBuffer), 'fake-image-data');
+});
+
 test('image upload proxies file to cloudflare images and returns accessible url', async () => {
   const env = createEnv({
     IMAGES_ACCOUNT_ID: 'account-123',
@@ -134,4 +199,17 @@ test('image upload proxies file to cloudflare images and returns accessible url'
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('image fetch returns 404 for missing r2 object', async () => {
+  const env = createEnv({
+    IMAGES_BUCKET: new MockR2Bucket(),
+  });
+
+  const response = await getImage({
+    params: { key: 'missing-image.png' },
+    env,
+  });
+
+  assert.equal(response.status, 404);
 });

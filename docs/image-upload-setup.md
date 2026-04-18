@@ -1,8 +1,45 @@
-# 图片上传配置（Cloudflare Images）
+# 图片上传配置（R2 优先）
 
-本文档用于把前端图片上传接入 Cloudflare Images，适用于 Cloudflare Pages Functions。
+本文档用于把前端图片上传接入 Cloudflare R2，适用于 Cloudflare Pages Functions。
 
-## 1. 所需配置
+## 1. 推荐方案：R2 Bucket 绑定
+
+当前项目会优先检测 `IMAGES_BUCKET` 绑定。
+
+只要绑定存在，图片上传就会自动走 R2，不需要再配置：
+
+- `IMAGES_ACCOUNT_ID`
+- `IMAGES_API_TOKEN`
+- `IMAGES_DELIVERY_URL`
+
+### Wrangler 示例
+
+```toml
+[[r2_buckets]]
+binding = "IMAGES_BUCKET"
+bucket_name = "your-images-bucket"
+```
+
+### Pages 控制台
+
+在 Cloudflare Pages 项目的 `Settings -> Functions -> R2 bucket bindings` 中添加：
+
+- 变量名：`IMAGES_BUCKET`
+- Bucket：选择你的图片桶
+
+## 2. 上传后的访问方式
+
+R2 模式下，后端会返回站内地址：
+
+`/api/images/{key}`
+
+前端不需要额外改动，只要正常使用上传返回的 URL 即可。
+
+## 3. 兼容回退：Cloudflare Images
+
+如果没有绑定 `IMAGES_BUCKET`，系统会回退到旧的 Cloudflare Images 方案。
+
+这时仍然需要：
 
 1. Secret（必填）
 - `IMAGES_API_TOKEN`
@@ -14,49 +51,28 @@
 - `IMAGES_DELIVERY_URL`
 - `IMAGES_VARIANT`（默认 `public`）
 
-## 2. Token 权限建议
+### Legacy Token 权限建议
 
 创建一个最小权限 API Token，至少包含：
+
 - Account scope
-- Cloudflare Images: Edit（或等价可上传权限）
+- Cloudflare Images: Edit
 
-## 3. 本地/线上配置方式
-
-### Wrangler Secret
-
-```bash
-wrangler secret put IMAGES_API_TOKEN
-```
-
-### Pages 环境变量
-
-在 Cloudflare Pages 的 Production / Preview 环境分别设置：
-
-- `IMAGES_ACCOUNT_ID`
-- `IMAGES_VARIANT`（可选，默认 `public`）
-- `IMAGES_DELIVERY_URL`（可选）
-
-## 4. 地址返回规则
-
-1. 如果配置了 `IMAGES_DELIVERY_URL`，后端返回：
-`{IMAGES_DELIVERY_URL}/{imageId}/{IMAGES_VARIANT}`
-
-2. 如果未配置 `IMAGES_DELIVERY_URL`，后端使用 Cloudflare API 返回的 `variants` 首项或匹配项。
-
-## 5. 验收步骤
+## 4. 验收步骤
 
 1. 管理员登录。
 2. 新建日记并上传 1 张图片。
 3. 保存后刷新页面，图片仍能正常访问。
 4. 校验接口：`POST /api/uploads/image` 未登录应返回 401。
+5. 如启用了 R2，访问上传返回的 `/api/images/{key}` 应返回 `200`。
 
-## 6. 常见问题
+## 5. 常见问题
 
 1. 返回“图片上传功能未配置”
-检查 `IMAGES_ACCOUNT_ID` 和 `IMAGES_API_TOKEN` 是否都已配置。
+说明当前既没有绑定 `IMAGES_BUCKET`，也没有完整配置 Cloudflare Images。
 
-2. 返回 Cloudflare 上传失败
-通常是 token 权限不足、账号不匹配或配额问题。
+2. R2 已绑定但图片打不开
+先确认 Pages 项目里绑定名是否确实是 `IMAGES_BUCKET`。
 
-3. 上传成功但图片无法打开
-优先检查 `IMAGES_DELIVERY_URL` 是否正确；不确定时先移除该变量让系统使用默认 `variants`。
+3. 上传成功但图片无法访问
+如使用 Legacy Images，优先检查 `IMAGES_DELIVERY_URL` 是否正确；不确定时先移除该变量让系统使用默认 `variants`。

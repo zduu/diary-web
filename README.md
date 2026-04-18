@@ -161,12 +161,14 @@ npm run start:remote
    - 建议：运行 `wrangler secret put ADMIN_BOOTSTRAP_PASSWORD`
    - 可选：运行 `wrangler secret put APP_BOOTSTRAP_PASSWORD`
    - 可选：运行 `wrangler secret put STATS_API_KEY`
-   - 如需启用真实图片上传：运行 `wrangler secret put IMAGES_API_TOKEN`
+   - 如需使用旧版 Cloudflare Images 上传：运行 `wrangler secret put IMAGES_API_TOKEN`
 
 5. **配置图片上传（可选但推荐）**
-   - 在 Pages 环境变量中配置 `IMAGES_ACCOUNT_ID`
-   - 可选配置 `IMAGES_DELIVERY_URL`（自定义交付域名前缀）
-   - 可选配置 `IMAGES_VARIANT`（默认 `public`）
+   - 推荐：在 Pages 里绑定 R2 bucket，变量名为 `IMAGES_BUCKET`
+   - 绑定后系统会自动启用 R2 上传，不需要额外图片 secret
+   - 如不使用 R2，仍可回退到 Cloudflare Images：配置 `IMAGES_ACCOUNT_ID`
+   - 旧版可选配置 `IMAGES_DELIVERY_URL`（自定义交付域名前缀）
+   - 旧版可选配置 `IMAGES_VARIANT`（默认 `public`）
    - 完整说明见 `docs/image-upload-setup.md`
 
 6. **统计接口说明（可选）**
