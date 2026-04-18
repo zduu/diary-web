@@ -29,6 +29,9 @@ const defaultLoadedSettings: Awaited<ReturnType<typeof adminSettingsStore.loadAd
     configured: true,
   },
   interfaceSettings: {
+    readingDesk: {
+      enabled: true,
+    },
     quickFilters: {
       enabled: true,
     },

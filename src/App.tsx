@@ -41,7 +41,6 @@ const ExportModal = lazy(() =>
 );
 
 const BACK_TO_LATEST_MIN_ENTRIES = 9;
-const BACK_TO_LATEST_EARLY_SCROLL_Y = 120;
 const BACK_TO_LATEST_DEFAULT_SCROLL_Y = 480;
 
 function AppContent() {
@@ -222,10 +221,12 @@ function AppContent() {
 
   useEffect(() => {
     const handleScroll = () => {
-      const scrollThreshold = displayEntries.length >= BACK_TO_LATEST_MIN_ENTRIES
-        ? BACK_TO_LATEST_EARLY_SCROLL_Y
-        : BACK_TO_LATEST_DEFAULT_SCROLL_Y;
-      setShowBackToLatestButton(window.scrollY > scrollThreshold);
+      if (displayEntries.length >= BACK_TO_LATEST_MIN_ENTRIES) {
+        setShowBackToLatestButton(true);
+        return;
+      }
+
+      setShowBackToLatestButton(window.scrollY > BACK_TO_LATEST_DEFAULT_SCROLL_Y);
     };
 
     handleScroll();
@@ -509,36 +510,38 @@ function AppContent() {
             />
           ) : (
             <div className="space-y-6">
-              <AppBrowsePanel
-                entries={entries}
-                filterMeta={filterMeta}
-                viewMode={viewMode}
-                dataMode={dataMode}
-                activeBrowse={activeBrowse}
-                accessibleEntriesCount={accessibleEntriesCount}
-                displayEntriesCount={displayEntries.length}
-                interfaceSettings={interfaceSettings}
-                interfaceSettingsLoading={interfaceSettingsLoading}
-                isAdminAuthenticated={isAdminAuthenticated}
-                isSearchPending={isSearchPending}
-                isSwitchingDataMode={isSwitchingDataMode}
-                onClearActiveBrowsing={handleClearActiveBrowsing}
-                onClearQuickFilters={handleClearQuickFilters}
-                onClearSearch={handleClearSearch}
-                onDataModeChange={handleDataModeChange}
-                onOpenExportModal={() => setIsExportModalOpen(true)}
-                onQuickFilterResults={handleQuickFilterResults}
-                onQuickFilterSummaryChange={onQuickFilterSummaryChange}
-                onSearchPendingChange={onSearchPendingChange}
-                onSearchQueryChange={onSearchQueryChange}
-                onSearchResults={handleSearchResults}
-                onSearchSummaryChange={onSearchSummaryChange}
-                onViewModeChange={handleViewModeChange}
-                quickFilterClearRequest={quickFilterClearRequest}
-                quickFilterResetSignal={quickFilterResetSignal}
-                searchClearRequest={searchClearRequest}
-                searchResetSignal={searchResetSignal}
-              />
+              {interfaceSettings.readingDesk.enabled && (
+                <AppBrowsePanel
+                  entries={entries}
+                  filterMeta={filterMeta}
+                  viewMode={viewMode}
+                  dataMode={dataMode}
+                  activeBrowse={activeBrowse}
+                  accessibleEntriesCount={accessibleEntriesCount}
+                  displayEntriesCount={displayEntries.length}
+                  interfaceSettings={interfaceSettings}
+                  interfaceSettingsLoading={interfaceSettingsLoading}
+                  isAdminAuthenticated={isAdminAuthenticated}
+                  isSearchPending={isSearchPending}
+                  isSwitchingDataMode={isSwitchingDataMode}
+                  onClearActiveBrowsing={handleClearActiveBrowsing}
+                  onClearQuickFilters={handleClearQuickFilters}
+                  onClearSearch={handleClearSearch}
+                  onDataModeChange={handleDataModeChange}
+                  onOpenExportModal={() => setIsExportModalOpen(true)}
+                  onQuickFilterResults={handleQuickFilterResults}
+                  onQuickFilterSummaryChange={onQuickFilterSummaryChange}
+                  onSearchPendingChange={onSearchPendingChange}
+                  onSearchQueryChange={onSearchQueryChange}
+                  onSearchResults={handleSearchResults}
+                  onSearchSummaryChange={onSearchSummaryChange}
+                  onViewModeChange={handleViewModeChange}
+                  quickFilterClearRequest={quickFilterClearRequest}
+                  quickFilterResetSignal={quickFilterResetSignal}
+                  searchClearRequest={searchClearRequest}
+                  searchResetSignal={searchResetSignal}
+                />
+              )}
 
               <ActiveBrowseSummary
                 activeBrowse={activeBrowse}

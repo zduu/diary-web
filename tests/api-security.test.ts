@@ -712,6 +712,7 @@ test('public settings endpoint does not expose password fields', async () => {
   const env = createEnv({
     settings: {
       app_password_enabled: 'true',
+      reading_desk_enabled: 'false',
       quick_filters_enabled: 'false',
       export_enabled: 'true',
       archive_view_enabled: 'true',
@@ -736,6 +737,7 @@ test('public settings endpoint does not expose password fields', async () => {
     'exportEnabled',
     'passwordProtectionEnabled',
     'quickFiltersEnabled',
+    'readingDeskEnabled',
     'recommendationsEnabled',
     'welcomePageEnabled',
   ]);
@@ -817,6 +819,7 @@ test('public settings fall back to defaults when stored boolean values are inval
   const env = createEnv({
     settings: {
       app_password_enabled: 'invalid',
+      reading_desk_enabled: 'invalid',
       quick_filters_enabled: 'invalid',
       export_enabled: 'invalid',
       archive_view_enabled: 'invalid',
@@ -833,6 +836,7 @@ test('public settings fall back to defaults when stored boolean values are inval
     success: boolean;
     data: {
       passwordProtectionEnabled: boolean;
+      readingDeskEnabled: boolean;
       quickFiltersEnabled: boolean;
       exportEnabled: boolean;
       archiveViewEnabled: boolean;
@@ -845,6 +849,7 @@ test('public settings fall back to defaults when stored boolean values are inval
 
   assert.equal(publicSettingsBody.success, true);
   assert.equal(publicSettingsBody.data.passwordProtectionEnabled, false);
+  assert.equal(publicSettingsBody.data.readingDeskEnabled, true);
   assert.equal(publicSettingsBody.data.quickFiltersEnabled, true);
   assert.equal(publicSettingsBody.data.exportEnabled, true);
   assert.equal(publicSettingsBody.data.archiveViewEnabled, true);

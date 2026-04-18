@@ -2,6 +2,7 @@ import type { PublicSettingsResponse } from './apiTypes.ts';
 
 export const publicBooleanSettingDefaults = {
   app_password_enabled: false,
+  reading_desk_enabled: true,
   quick_filters_enabled: true,
   export_enabled: true,
   archive_view_enabled: true,
@@ -22,6 +23,7 @@ export const publicBooleanSettingStorageDefaults: Record<PublicBooleanSettingKey
 
 const publicSettingResponseFields: Record<PublicBooleanSettingKey, keyof PublicSettingsResponse> = {
   app_password_enabled: 'passwordProtectionEnabled',
+  reading_desk_enabled: 'readingDeskEnabled',
   quick_filters_enabled: 'quickFiltersEnabled',
   export_enabled: 'exportEnabled',
   archive_view_enabled: 'archiveViewEnabled',

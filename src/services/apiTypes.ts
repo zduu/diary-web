@@ -5,6 +5,7 @@ export interface SessionState {
 
 export interface PublicSettingsResponse {
   passwordProtectionEnabled: boolean;
+  readingDeskEnabled: boolean;
   quickFiltersEnabled: boolean;
   exportEnabled: boolean;
   archiveViewEnabled: boolean;

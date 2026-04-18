@@ -29,6 +29,7 @@ export interface PasswordSettings extends ToggleSetting {
 }
 
 export type InterfaceFeatureKey =
+  | 'readingDesk'
   | 'quickFilters'
   | 'export'
   | 'archiveView'

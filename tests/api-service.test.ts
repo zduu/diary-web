@@ -392,6 +392,7 @@ test('mock mode public settings fall back to defaults on invalid boolean strings
   localStorageMock.setItem('diary_force_local', 'true');
   localStorageMock.setItem('diary_app_settings', JSON.stringify({
     app_password_enabled: 'invalid',
+    reading_desk_enabled: 'invalid',
     quick_filters_enabled: 'invalid',
     export_enabled: 'invalid',
     archive_view_enabled: 'invalid',
@@ -406,6 +407,7 @@ test('mock mode public settings fall back to defaults on invalid boolean strings
   const settings = await service.getPublicSettings();
 
   assert.equal(settings.passwordProtectionEnabled, false);
+  assert.equal(settings.readingDeskEnabled, true);
   assert.equal(settings.quickFiltersEnabled, true);
   assert.equal(settings.exportEnabled, true);
   assert.equal(settings.archiveViewEnabled, true);

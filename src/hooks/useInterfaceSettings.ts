@@ -9,6 +9,7 @@ interface ToggleSetting {
 }
 
 interface InterfaceSettings {
+  readingDesk: ToggleSetting;
   quickFilters: ToggleSetting;
   export: ToggleSetting;
   archiveView: ToggleSetting;
@@ -25,6 +26,7 @@ function createToggleSetting(enabled: boolean): ToggleSetting {
 
 function createInterfaceSettings(publicSettings: PublicSettingsResponse): InterfaceSettings {
   return {
+    readingDesk: createToggleSetting(publicSettings.readingDeskEnabled),
     quickFilters: createToggleSetting(publicSettings.quickFiltersEnabled),
     export: createToggleSetting(publicSettings.exportEnabled),
     archiveView: createToggleSetting(publicSettings.archiveViewEnabled),

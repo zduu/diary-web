@@ -13,6 +13,7 @@ interface LoadedAdminPanelSettings {
 
 function createInterfaceSettingsResponse(settings: Awaited<ReturnType<typeof apiService.getAdminSettings>>): AdminInterfaceSettings {
   return {
+    readingDesk: { enabled: settings.readingDeskEnabled },
     quickFilters: { enabled: settings.quickFiltersEnabled },
     export: { enabled: settings.exportEnabled },
     archiveView: { enabled: settings.archiveViewEnabled },
@@ -53,6 +54,7 @@ export async function persistPasswordSettings(settings: PasswordSettings) {
 
 export async function persistFeatureToggle(
   key:
+    | 'reading_desk_enabled'
     | 'quick_filters_enabled'
     | 'export_enabled'
     | 'archive_view_enabled'

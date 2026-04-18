@@ -1,6 +1,7 @@
 import type { AdminInterfaceSettings, InterfaceFeatureKey } from './adminPanelTypes';
 
 type InterfaceFeatureSettingKey =
+  | 'reading_desk_enabled'
   | 'quick_filters_enabled'
   | 'export_enabled'
   | 'archive_view_enabled'
@@ -17,6 +18,13 @@ type InterfaceFeatureSchema = {
 };
 
 export const interfaceFeatureSchema: Record<InterfaceFeatureKey, InterfaceFeatureSchema> = {
+  readingDesk: {
+    apiKey: 'reading_desk_enabled',
+    title: 'READING DESK',
+    successLabel: 'READING DESK',
+    enabledDescription: '隐藏顶部 READING DESK 浏览工具区',
+    disabledDescription: '显示顶部 READING DESK 浏览工具区',
+  },
   quickFilters: {
     apiKey: 'quick_filters_enabled',
     title: '快速筛选',
@@ -63,6 +71,7 @@ export const interfaceFeatureSchema: Record<InterfaceFeatureKey, InterfaceFeatur
 
 export function createDefaultInterfaceSettings(): AdminInterfaceSettings {
   return {
+    readingDesk: { enabled: true },
     quickFilters: { enabled: true },
     export: { enabled: true },
     archiveView: { enabled: true },
