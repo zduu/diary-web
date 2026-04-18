@@ -12,7 +12,7 @@ import {
 } from '../_shared.ts';
 
 type EntryUpdates = Partial<Omit<DiaryEntry, 'id' | 'created_at' | 'updated_at'>>;
-const ENTRY_UPDATE_BODY_MAX_BYTES = 512 * 1024;
+const ENTRY_UPDATE_BODY_MAX_BYTES = 40 * 1024 * 1024;
 
 function appendUpdateField(fields: string[], values: unknown[], field: string, value: unknown) {
   fields.push(`${field} = ?`);

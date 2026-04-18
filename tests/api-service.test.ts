@@ -414,3 +414,31 @@ test('mock mode public settings fall back to defaults on invalid boolean strings
   assert.equal(settings.browseStatusEnabled, true);
   assert.equal(settings.deviceStatusEnabled, true);
 });
+
+test('remote image upload falls back to base64 data urls when upload endpoint fails', async () => {
+  localStorageMock.clear();
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = typeof input === 'string' ? input : input.url;
+
+    if (url.endsWith('/api/uploads/image')) {
+      return jsonResponse({
+        success: false,
+        error: '缺少图片文件，请检查上传表单是否包含图片文件',
+      }, 400);
+    }
+
+    throw new Error(`Unexpected fetch URL in test: ${url}`);
+  };
+
+  try {
+    const ApiService = await loadApiServiceClass();
+    const service = new ApiService();
+    const imageUrl = await service.uploadImage(new File(['hello'], 'a.png', { type: 'image/png' }));
+
+    assert.match(imageUrl, /^data:image\/png;base64,/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

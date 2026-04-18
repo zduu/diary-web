@@ -14,7 +14,7 @@ type BatchUpdateRequest = {
 };
 
 const MAX_BATCH_ENTRIES = 200;
-const BATCH_BODY_MAX_BYTES = 2 * 1024 * 1024;
+const BATCH_BODY_MAX_BYTES = 50 * 1024 * 1024;
 
 function parseBatchEntries(input: unknown): { entries?: DiaryEntry[]; error?: string; status?: number } {
   if (input === undefined) {

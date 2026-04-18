@@ -12,7 +12,7 @@ import {
 } from '../../_shared.ts';
 
 type EditRequest = Partial<Omit<DiaryEntry, 'id' | 'created_at' | 'updated_at'>>;
-const ENTRY_EDIT_BODY_MAX_BYTES = 512 * 1024;
+const ENTRY_EDIT_BODY_MAX_BYTES = 40 * 1024 * 1024;
 
 export const onRequestOptions = async (): Promise<Response> => optionsResponse();
 

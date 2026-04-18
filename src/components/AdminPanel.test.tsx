@@ -305,7 +305,7 @@ describe('AdminPanel', () => {
     expect(screen.queryByText('选择导入模式')).not.toBeInTheDocument();
   });
 
-  it('uploads embedded backup images before remote import', async () => {
+  it('imports embedded backup images without calling the upload endpoint', async () => {
     vi.spyOn(apiService, 'loginAdmin').mockResolvedValue({
       isAuthenticated: true,
       isAdminAuthenticated: true,
@@ -318,9 +318,8 @@ describe('AdminPanel', () => {
         images: ['data:image/png;base64,aGVsbG8='],
       },
     ]);
-    vi.spyOn(apiService, 'getCurrentMode').mockReturnValue('remote');
-    vi.spyOn(apiService, 'uploadImage').mockResolvedValue('https://example.com/imported-image.png');
     vi.spyOn(apiService, 'batchImportEntries').mockResolvedValue([]);
+    const uploadImageSpy = vi.spyOn(apiService, 'uploadImage');
     const onEntriesUpdate = vi.fn(async () => {});
     const user = userEvent.setup();
 
@@ -350,12 +349,12 @@ describe('AdminPanel', () => {
     await user.click(screen.getByRole('button', { name: '确认导入' }));
 
     await waitFor(() => {
-      expect(apiService.uploadImage).toHaveBeenCalledTimes(1);
+      expect(uploadImageSpy).not.toHaveBeenCalled();
       expect(apiService.batchImportEntries).toHaveBeenCalledWith([
         {
           title: '带图片的导入日记',
           content: '导入内容',
-          images: ['https://example.com/imported-image.png'],
+          images: ['data:image/png;base64,aGVsbG8='],
         },
       ], { overwrite: false });
       expect(onEntriesUpdate).toHaveBeenCalledTimes(1);

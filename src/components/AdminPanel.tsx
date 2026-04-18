@@ -31,11 +31,8 @@ import { ModalShell } from './ModalShell';
 import { useThemeContext } from './ThemeProvider';
 import { useAdminAuth } from './AdminAuthContext';
 import { apiService } from '../services/api';
-import type { DiaryEntry } from '../types/index.ts';
 import { getSmartTimeDisplay } from '../utils/timeUtils.ts';
 import { debugError, debugLog } from '../utils/logger.ts';
-
-const EMBEDDED_IMAGE_URL_PATTERN = /^data:(image\/[a-z0-9.+-]+);base64,/i;
 
 function buildFeatureToggleSuccessMessage(label: string, enabled: boolean) {
   return `${label}已${enabled ? '开启' : '关闭'}！`;
@@ -45,83 +42,6 @@ function resetFileInput(input: HTMLInputElement | null) {
   if (input) {
     input.value = '';
   }
-}
-
-function isEmbeddedImageUrl(value: string) {
-  return EMBEDDED_IMAGE_URL_PATTERN.test(value);
-}
-
-function getImageExtensionFromMimeType(contentType: string) {
-  switch (contentType.toLowerCase()) {
-    case 'image/jpeg':
-      return 'jpg';
-    case 'image/png':
-      return 'png';
-    case 'image/gif':
-      return 'gif';
-    case 'image/webp':
-      return 'webp';
-    case 'image/svg+xml':
-      return 'svg';
-    case 'image/avif':
-      return 'avif';
-    default:
-      return 'bin';
-  }
-}
-
-function convertEmbeddedImageToFile(dataUrl: string, entryIndex: number, imageIndex: number) {
-  const match = dataUrl.match(EMBEDDED_IMAGE_URL_PATTERN);
-  if (!match) {
-    throw new Error(`第 ${entryIndex + 1} 条导入数据的第 ${imageIndex + 1} 张图片不是有效的本地图片格式`);
-  }
-
-  const contentType = match[1];
-  const base64Payload = dataUrl.slice(match[0].length);
-
-  let binary = '';
-  try {
-    binary = atob(base64Payload);
-  } catch {
-    throw new Error(`第 ${entryIndex + 1} 条导入数据的第 ${imageIndex + 1} 张图片内容已损坏`);
-  }
-
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  return new File(
-    [bytes],
-    `imported-entry-${entryIndex + 1}-image-${imageIndex + 1}.${getImageExtensionFromMimeType(contentType)}`,
-    { type: contentType }
-  );
-}
-
-async function prepareImportedEntriesForCurrentMode(importedEntries: DiaryEntry[]) {
-  if (apiService.getCurrentMode() !== 'remote') {
-    return importedEntries;
-  }
-
-  return Promise.all(importedEntries.map(async (entry, entryIndex) => {
-    if (!entry.images?.some(isEmbeddedImageUrl)) {
-      return entry;
-    }
-
-    const resolvedImages = await Promise.all(entry.images.map(async (image, imageIndex) => {
-      if (!isEmbeddedImageUrl(image)) {
-        return image;
-      }
-
-      const file = convertEmbeddedImageToFile(image, entryIndex, imageIndex);
-      return apiService.uploadImage(file);
-    }));
-
-    return {
-      ...entry,
-      images: resolvedImages,
-    };
-  }));
 }
 
 export function AdminPanel({
@@ -299,8 +219,7 @@ export function AdminPanel({
     setIsImportSubmitting(true);
 
     try {
-      const preparedEntries = await prepareImportedEntriesForCurrentMode(pendingImportEntries);
-      await apiService.batchImportEntries(preparedEntries, { overwrite: importMode === 'overwrite' });
+      await apiService.batchImportEntries(pendingImportEntries, { overwrite: importMode === 'overwrite' });
       await onEntriesUpdate();
       setSearchQuery('');
       setPendingImportEntries(null);

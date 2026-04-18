@@ -1,4 +1,4 @@
-const isDebugEnabled = import.meta.env.DEV;
+const isDebugEnabled = Boolean(import.meta.env?.DEV);
 
 export function debugLog(...args: unknown[]) {
   if (!isDebugEnabled) {

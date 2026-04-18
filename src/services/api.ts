@@ -5,6 +5,7 @@ import { MockApiService } from './mockApiService.ts';
 import { PublicSettingsStore } from './publicSettingsStore.ts';
 import { ApiRequestError, RemoteApiClient } from './remoteApiClient.ts';
 import { withRetry, verifyDeletion, getConsistencyErrorMessage } from '../utils/d1Utils.ts';
+import { debugWarn } from '../utils/logger.ts';
 
 function getViteEnvValue(key: 'MODE' | 'VITE_USE_MOCK_API'): string | undefined {
   return import.meta.env?.[key];
@@ -20,6 +21,22 @@ const signedOutSession: SessionState = {
   isAuthenticated: false,
   isAdminAuthenticated: false,
 };
+
+function encodeBytesToBase64(bytes: Uint8Array) {
+  let binary = '';
+
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index] ?? 0);
+  }
+
+  return btoa(binary);
+}
+
+async function convertFileToDataUrl(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const contentType = file.type || 'application/octet-stream';
+  return `data:${contentType};base64,${encodeBytesToBase64(bytes)}`;
+}
 
 export class ApiService {
   private readonly modeStore = new ApiModeStore();
@@ -184,19 +201,24 @@ export class ApiService {
     return this.runWithCurrentMode({
       mock: () => this.mockService.uploadImage(file),
       remote: async () => {
-        const formData = new FormData();
-        formData.set('file', file, file.name);
+        try {
+          const formData = new FormData();
+          formData.set('file', file, file.name);
 
-        const payload = await this.requestRemoteData<{ url: string }>('/uploads/image', '图片上传失败', {
-          method: 'POST',
-          body: formData,
-        });
+          const payload = await this.requestRemoteData<{ url: string }>('/uploads/image', '图片上传失败', {
+            method: 'POST',
+            body: formData,
+          });
 
-        if (!payload.url) {
-          throw new Error('图片上传响应无效');
+          if (!payload.url) {
+            throw new Error('图片上传响应无效');
+          }
+
+          return payload.url;
+        } catch (error) {
+          debugWarn('远程图片上传失败，回退为内嵌 base64 图片:', error);
+          return convertFileToDataUrl(file);
         }
-
-        return payload.url;
       },
     });
   }

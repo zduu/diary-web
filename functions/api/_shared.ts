@@ -52,6 +52,7 @@ const MAX_MOOD_LENGTH = 50;
 const MAX_WEATHER_LENGTH = 50;
 const MAX_IMAGES_COUNT = 20;
 const MAX_IMAGE_URL_LENGTH = 2048;
+const MAX_IMAGE_DATA_URL_LENGTH = 12 * 1024 * 1024;
 const MAX_TAGS_COUNT = 30;
 const MAX_TAG_LENGTH = 64;
 const MAX_LOCATION_JSON_LENGTH = 8192;
@@ -194,6 +195,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
+}
+
+function isImageDataUrl(value: string): boolean {
+  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(value);
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -706,8 +711,18 @@ export function normalizeEntryInput(
         return { error: `图片数量不能超过 ${MAX_IMAGES_COUNT} 张` };
       }
 
-      if (input.images.some((item) => item.length > MAX_IMAGE_URL_LENGTH)) {
-        return { error: `图片地址长度不能超过 ${MAX_IMAGE_URL_LENGTH} 字符` };
+      for (const item of input.images) {
+        if (isImageDataUrl(item)) {
+          if (item.length > MAX_IMAGE_DATA_URL_LENGTH) {
+            return { error: `base64 图片长度不能超过 ${MAX_IMAGE_DATA_URL_LENGTH} 字符` };
+          }
+
+          continue;
+        }
+
+        if (item.length > MAX_IMAGE_URL_LENGTH) {
+          return { error: `图片地址长度不能超过 ${MAX_IMAGE_URL_LENGTH} 字符` };
+        }
       }
 
       data.images = JSON.stringify(input.images);

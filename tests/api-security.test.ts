@@ -1657,6 +1657,46 @@ test('batch import pre-validates all entries to prevent partial writes', async (
   assert.equal(db.entries[0].title, '已有内容');
 });
 
+test('batch import accepts embedded base64 images without requiring upload files', async () => {
+  const env = createEnv({
+    settings: {
+      admin_password: 'admin-pass',
+      app_password_enabled: 'false',
+      quick_filters_enabled: 'true',
+      export_enabled: 'true',
+      archive_view_enabled: 'true',
+      welcome_page_enabled: 'true',
+    },
+  });
+
+  const adminCookie = await loginAsAdmin(env);
+
+  const response = await batchImportEntries({
+    request: new Request('https://example.com/api/entries/batch', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        entries: [
+          {
+            title: '带内嵌图片',
+            content: 'imported',
+            images: ['data:image/png;base64,aGVsbG8='],
+          },
+        ],
+      }),
+    }),
+    env,
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await response.json() as { success: boolean; data?: Array<{ images?: string[] }> };
+  assert.equal(payload.success, true);
+  assert.deepEqual(payload.data?.[0]?.images, ['data:image/png;base64,aGVsbG8=']);
+});
+
 test('batch update enforces valid ids and prevents partial writes', async () => {
   const env = createEnv({
     settings: {
@@ -2218,7 +2258,7 @@ test('json endpoints reject oversized payloads with 413', async () => {
         'Content-Type': 'application/json',
         Cookie: adminCookie,
       },
-      body: JSON.stringify({ title: '大内容', content: 'x'.repeat(600 * 1024) }),
+      body: JSON.stringify({ title: '大内容', content: 'x'.repeat(41 * 1024 * 1024) }),
     }),
     env,
   });
@@ -2249,7 +2289,7 @@ test('json endpoints reject oversized payloads with 413', async () => {
         entries: [
           {
             title: '超大批量',
-            content: 'x'.repeat(2_100_000),
+            content: 'x'.repeat(52 * 1024 * 1024),
           },
         ],
       }),

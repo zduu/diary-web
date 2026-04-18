@@ -2,7 +2,7 @@ import type { ApiResponse, DiaryEntry } from '../../src/types/index.ts';
 import type { Env } from './_shared.ts';
 import { formatEntry, jsonResponse, normalizeEntryInput, optionsResponse, parseJsonBody, readSession, requireAdminSession } from './_shared.ts';
 
-const ENTRY_WRITE_BODY_MAX_BYTES = 512 * 1024;
+const ENTRY_WRITE_BODY_MAX_BYTES = 40 * 1024 * 1024;
 
 export const onRequestOptions = async (): Promise<Response> => optionsResponse();
 
