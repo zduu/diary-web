@@ -51,10 +51,10 @@ async function buildSessionCookie(scope: 'app' | 'admin', env: any): Promise<str
   return `diary_session=${encodeURIComponent(token)}`;
 }
 
-function buildImageUploadRequest(cookie?: string, file?: File): Request {
+function buildImageUploadRequest(cookie?: string, file?: File, fieldName = 'file'): Request {
   const formData = new FormData();
   if (file) {
-    formData.set('file', file, file.name);
+    formData.set(fieldName, file, file.name);
   }
 
   return new Request('https://example.com/api/uploads/image', {
@@ -111,6 +111,48 @@ test('image upload validates file type', async () => {
   });
 
   assert.equal(response.status, 400);
+});
+
+test('image upload accepts common fallback field names', async () => {
+  const bucket = new MockR2Bucket();
+  const env = createEnv({
+    IMAGES_BUCKET: bucket,
+  });
+  const adminCookie = await buildSessionCookie('admin', env);
+
+  const response = await uploadImage({
+    request: buildImageUploadRequest(adminCookie, new File(['fake-image-data'], 'a.png', { type: 'image/png' }), 'image'),
+    env,
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await parseJson<{ success: boolean; data?: { url: string } }>(response);
+  assert.equal(payload.success, true);
+  assert.match(payload.data?.url ?? '', /^https:\/\/example\.com\/api\/images\/diary%2Fimage-/);
+});
+
+test('image upload falls back to the first file in multipart form data', async () => {
+  const bucket = new MockR2Bucket();
+  const env = createEnv({
+    IMAGES_BUCKET: bucket,
+  });
+  const adminCookie = await buildSessionCookie('admin', env);
+  const formData = new FormData();
+  formData.set('note', 'not-a-file');
+  formData.set('attachment', new File(['fake-image-data'], 'a.png', { type: 'image/png' }), 'a.png');
+
+  const response = await uploadImage({
+    request: new Request('https://example.com/api/uploads/image', {
+      method: 'POST',
+      headers: { Cookie: adminCookie },
+      body: formData,
+    }),
+    env,
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await parseJson<{ success: boolean; data?: { url: string } }>(response);
+  assert.equal(payload.success, true);
 });
 
 test('image upload stores file in r2 and returns local image URL when bucket binding exists', async () => {

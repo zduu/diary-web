@@ -6,7 +6,7 @@ export interface AdminPanelProps {
   isOpen: boolean;
   onClose: () => void;
   entries: DiaryEntry[];
-  onEntriesUpdate: () => void;
+  onEntriesUpdate: () => void | Promise<void>;
   onSessionChange?: (session: { isAuthenticated: boolean; isAdminAuthenticated: boolean }) => void;
   onInterfaceSettingsChange?: () => void | Promise<void>;
   onDeleteEntry?: (entryId: number) => Promise<void>;

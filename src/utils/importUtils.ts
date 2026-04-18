@@ -97,15 +97,21 @@ function validateImportedEntry(entry: unknown, index: number): asserts entry is 
 }
 
 export function parseEntriesBackupData(input: unknown): DiaryEntry[] {
-  if (!isRecord(input) || !Array.isArray(input.entries)) {
-    throw new Error('无效的备份文件格式：缺少 entries 数组');
+  const importedEntries = Array.isArray(input)
+    ? input
+    : isRecord(input) && Array.isArray(input.entries)
+      ? input.entries
+      : null;
+
+  if (!importedEntries) {
+    throw new Error('无效的备份文件格式：缺少 entries 数组或日记数组');
   }
 
-  input.entries.forEach((entry, index) => {
+  importedEntries.forEach((entry, index) => {
     validateImportedEntry(entry, index);
   });
 
-  return input.entries as DiaryEntry[];
+  return importedEntries as DiaryEntry[];
 }
 
 function readFileAsText(file: File): Promise<string> {

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -7,6 +7,7 @@ import { AdminPanel } from './AdminPanel';
 import { ThemeProvider } from './ThemeProvider';
 import { apiService } from '../services/api';
 import * as adminSettingsStore from './admin/adminSettingsStore';
+import * as adminPanelActions from './admin/adminPanelActions';
 
 function renderWithProviders(ui: ReactElement) {
   return render(
@@ -246,5 +247,61 @@ describe('AdminPanel', () => {
 
     expect(await screen.findByText('应用密码保护已开启！')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /关闭访问密码/ })).toBeInTheDocument();
+  });
+
+  it('shows the import mode dialog inside the admin panel and refreshes after import', async () => {
+    vi.spyOn(apiService, 'loginAdmin').mockResolvedValue({
+      isAuthenticated: true,
+      isAdminAuthenticated: true,
+    });
+    vi.spyOn(adminSettingsStore, 'loadAdminPanelSettings').mockResolvedValue(defaultLoadedSettings);
+    vi.spyOn(adminPanelActions, 'parseEntriesBackup').mockResolvedValue([
+      {
+        title: '导入的日记',
+        content: '导入内容',
+      },
+    ]);
+    vi.spyOn(apiService, 'batchImportEntries').mockResolvedValue([]);
+    const onEntriesUpdate = vi.fn(async () => {});
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <AdminPanel
+        isOpen={true}
+        onClose={vi.fn()}
+        entries={[sampleEntry]}
+        onEntriesUpdate={onEntriesUpdate}
+      />
+    );
+
+    await user.type(screen.getByPlaceholderText('输入管理员密码'), 'admin-pass');
+    await user.click(screen.getByRole('button', { name: '验证' }));
+    expect(await screen.findByRole('button', { name: '退出登录' })).toBeInTheDocument();
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement | null;
+    expect(fileInput).not.toBeNull();
+
+    fireEvent.change(fileInput!, {
+      target: {
+        files: [new File(['{}'], 'backup.json', { type: 'application/json' })],
+      },
+    });
+
+    expect(await screen.findByText('选择导入模式')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '确认导入' }));
+
+    await waitFor(() => {
+      expect(apiService.batchImportEntries).toHaveBeenCalledWith([
+        {
+          title: '导入的日记',
+          content: '导入内容',
+        },
+      ], { overwrite: false });
+      expect(onEntriesUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    await screen.findByText('合并导入成功！已导入 1 条日记。');
+    expect(screen.queryByText('选择导入模式')).not.toBeInTheDocument();
   });
 });

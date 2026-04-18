@@ -9,7 +9,7 @@ interface UseAdminPanelEntryActionsOptions {
   entries: DiaryEntry[];
   onClose: () => void;
   onDeleteEntry?: (entryId: number) => Promise<void>;
-  onEntriesUpdate: () => void;
+  onEntriesUpdate: () => void | Promise<void>;
   onLogoutConfirmed: () => void;
   requestDeleteConfirm: (entryId: number, entryTitle: string) => void;
   clearConfirmState: () => void;
@@ -69,7 +69,7 @@ export function useAdminPanelEntryActions({
       await runEntryOperation(entryId, isCurrentlyHidden ? 'showing' : 'hiding', async () => {
         debugLog(`切换隐藏状态: ID ${entryId}, 当前状态: ${isCurrentlyHidden ? '隐藏' : '显示'}`);
         await apiService.toggleEntryVisibility(entryId);
-        onEntriesUpdate();
+        await onEntriesUpdate();
       });
       showOperationFeedback(isCurrentlyHidden ? '日记已显示' : '日记已隐藏');
     } catch (error) {
@@ -100,7 +100,7 @@ export function useAdminPanelEntryActions({
         }
 
         await apiService.deleteEntry(entryId);
-        onEntriesUpdate();
+        await onEntriesUpdate();
       });
       showOperationFeedback('日记删除成功');
     } catch (error) {

@@ -28,8 +28,17 @@ describe('importUtils', () => {
     })).toHaveLength(1);
   });
 
+  it('accepts plain entry arrays from older backups', () => {
+    expect(parseEntriesBackupData([
+      {
+        title: '旧版备份',
+        content: '直接数组格式也应该支持',
+      },
+    ])).toHaveLength(1);
+  });
+
   it('rejects backups without entries arrays', () => {
-    expect(() => parseEntriesBackupData({ foo: [] })).toThrow('无效的备份文件格式：缺少 entries 数组');
+    expect(() => parseEntriesBackupData({ foo: [] })).toThrow('无效的备份文件格式：缺少 entries 数组或日记数组');
   });
 
   it('rejects malformed entry fields with indexed messages', () => {

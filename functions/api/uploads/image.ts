@@ -37,6 +37,7 @@ const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const DEFAULT_IMAGE_VARIANT = 'public';
 const R2_IMAGE_KEY_PREFIX = 'diary';
 const DEFAULT_IMAGE_CONTENT_TYPE = 'application/octet-stream';
+const FALLBACK_UPLOAD_FIELD_NAMES = ['image', 'upload', 'imageFile', 'files'];
 
 function getCloudflareImagesConfig(env: Env): CloudflareImagesConfig | null {
   const accountId = env.IMAGES_ACCOUNT_ID?.trim();
@@ -172,6 +173,28 @@ async function uploadToCloudflareImages(file: File, config: CloudflareImagesConf
   return uploadedImageUrl;
 }
 
+function extractUploadedFile(formData: FormData): File | null {
+  const directFile = formData.get('file');
+  if (directFile instanceof File) {
+    return directFile;
+  }
+
+  for (const fieldName of FALLBACK_UPLOAD_FIELD_NAMES) {
+    const candidate = formData.get(fieldName);
+    if (candidate instanceof File) {
+      return candidate;
+    }
+  }
+
+  for (const value of formData.values()) {
+    if (value instanceof File) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 export const onRequestOptions = async (): Promise<Response> => optionsResponse();
 
 export const onRequestPost = async (context: { request: Request; env: Env }): Promise<Response> => {
@@ -202,12 +225,12 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
 
   try {
     const formData = await context.request.formData();
-    const file = formData.get('file');
+    const file = extractUploadedFile(formData);
 
-    if (!(file instanceof File)) {
+    if (!file) {
       return jsonResponse<ApiResponse>({
         success: false,
-        error: '缺少图片文件（字段名应为 file）',
+        error: '缺少图片文件，请检查上传表单是否包含图片文件',
       }, { status: 400 });
     }
 

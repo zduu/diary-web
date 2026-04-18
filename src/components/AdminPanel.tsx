@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { NotificationToast } from './NotificationToast';
-import { AdminConfirmDialog } from './admin/AdminPanelDialogs';
+import { AdminConfirmDialog, AdminImportModeDialog } from './admin/AdminPanelDialogs';
 import {
   persistAdminSettings,
   persistFeatureToggle,
@@ -15,7 +15,6 @@ import {
 import { useAdminPanelFeedback } from './admin/adminPanelState';
 import { useAdminPanelEntryActions } from './admin/useAdminPanelEntryActions';
 import { useAdminPanelSettings } from './admin/useAdminPanelSettings';
-import { showImportModeDialog } from './admin/importModeDialog';
 import {
   AdminAuthenticatedView,
   AdminLoginView,
@@ -127,6 +126,8 @@ export function AdminPanel({
   }, [isAdminAuthenticated]);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [pendingImportEntries, setPendingImportEntries] = useState<typeof entries | null>(null);
+  const [isImportSubmitting, setIsImportSubmitting] = useState(false);
   const {
     handleConfirmAction,
     handleDeleteEntry,
@@ -194,21 +195,41 @@ export function AdminPanel({
     try {
       const { parseEntriesBackup } = await import('./admin/adminPanelActions');
       const importedEntries = await parseEntriesBackup(file);
-
-      const importMode = await showImportModeDialog(importedEntries.length, entries.length);
-      if (importMode === null) {
-        return;
-      }
-
-      await apiService.batchImportEntries(importedEntries, { overwrite: importMode === 'overwrite' });
-      onEntriesUpdate();
-
-      const modeText = importMode === 'overwrite' ? '覆盖导入' : '合并导入';
-      showOperationFeedback(`${modeText}成功！已导入 ${importedEntries.length} 条日记。`);
+      setPendingImportEntries(importedEntries);
     } catch (error) {
       handleAdminOperationError(error, error instanceof Error ? error.message : '文件解析失败！请检查文件格式。');
     } finally {
       resetFileInput(input);
+    }
+  };
+
+  const handleCloseImportDialog = () => {
+    if (isImportSubmitting) {
+      return;
+    }
+
+    setPendingImportEntries(null);
+  };
+
+  const handleConfirmImport = async (importMode: 'merge' | 'overwrite') => {
+    if (!pendingImportEntries) {
+      return;
+    }
+
+    setIsImportSubmitting(true);
+
+    try {
+      await apiService.batchImportEntries(pendingImportEntries, { overwrite: importMode === 'overwrite' });
+      await onEntriesUpdate();
+      setSearchQuery('');
+      setPendingImportEntries(null);
+
+      const modeText = importMode === 'overwrite' ? '覆盖导入' : '合并导入';
+      showOperationFeedback(`${modeText}成功！已导入 ${pendingImportEntries.length} 条日记。`);
+    } catch (error) {
+      handleAdminOperationError(error, error instanceof Error ? error.message : '导入失败');
+    } finally {
+      setIsImportSubmitting(false);
     }
   };
 
@@ -426,6 +447,17 @@ export function AdminPanel({
         getTextColor={getTextColor}
         onClose={closeConfirmDialog}
         onConfirm={handleConfirmAction}
+      />
+
+      <AdminImportModeDialog
+        isOpen={Boolean(pendingImportEntries)}
+        importCount={pendingImportEntries?.length ?? 0}
+        existingCount={entries.length}
+        isSubmitting={isImportSubmitting}
+        theme={theme}
+        getTextColor={getTextColor}
+        onClose={handleCloseImportDialog}
+        onConfirm={handleConfirmImport}
       />
     </ModalShell>
   );
