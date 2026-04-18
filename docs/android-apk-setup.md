@@ -10,6 +10,7 @@
 - 正式 APK 默认锁定本地模式，不再暴露“远程 Pages”模式切换。
 - 如需联动云端，正式 APK 通过管理员面板里的远程绑定 + 手动同步完成，不走静默自动切换。
 - 调试 APK 默认保留数据模式切换，便于本机联调远程 Pages / Functions。
+- 如需稳定覆盖安装后续 release 版本，建议配置固定的 Android release keystore；否则 workflow 会回退到 debug 签名，仅保证当前包可安装。
 
 ## 推荐发布方式：GitHub Actions
 
@@ -40,6 +41,19 @@ git push origin apk-20260418-master
 - 手动触发时可以选择 `release` 或 `debug`
 - `debug` 适合联调，会保留数据模式切换
 - 手动触发仍只生成 artifact，不会自动创建 GitHub Release
+
+### Release 签名配置
+
+如需让 GitHub Actions 产出可稳定升级覆盖的 release APK，建议在仓库 secrets 中配置：
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+其中 `ANDROID_KEYSTORE_BASE64` 是 release keystore 文件的 base64 内容。
+
+如果这些 secrets 未配置，workflow 仍会构建 release 变体，但会回退到 debug 签名。这样生成的 APK 可以安装，但后续不同构建之间不保证可直接覆盖升级。
 
 ## 本地构建
 

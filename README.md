@@ -160,6 +160,7 @@ Android APK 推荐只通过 GitHub Actions 构建，不在本机安装 Android S
 - GitHub Actions 在 tag 发布时默认产出的是 `release` APK。
 - 需要联调时，可在 Actions 页面手动触发 workflow，并选择 `debug` 变体。
 - 本地执行 `npm run android:apk:release` 生成的正式 APK 默认锁定本地模式，云端联动通过管理员面板的远程绑定与手动同步完成。
+- 如需稳定分发和后续覆盖升级，建议为 Android workflow 配置固定的 release keystore secrets；未配置时会回退到 debug 签名，只保证 APK 可安装。
 
 当前 Android workflow 位置：
 

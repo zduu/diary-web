@@ -25,6 +25,10 @@ jobs:
       contents: write
     env:
       BUILD_VARIANT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build_variant || 'release' }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -47,6 +51,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Prepare Android signing
+        if: env.BUILD_VARIANT == 'release' && env.ANDROID_KEYSTORE_BASE64 != ''
+        run: |
+          KEYSTORE_PATH="${RUNNER_TEMP}/android-release.keystore"
+          echo "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${KEYSTORE_PATH}"
+          echo "ANDROID_KEYSTORE_PATH=${KEYSTORE_PATH}" >> "${GITHUB_ENV}"
+
       - name: Sync Android project
         run: |
           if [ "${BUILD_VARIANT}" = "debug" ]; then
@@ -58,6 +69,10 @@ jobs:
       - name: Build APK
         working-directory: android
         run: |
+          if [ "${BUILD_VARIANT}" = "release" ] && [ -z "${ANDROID_KEYSTORE_PATH}" ]; then
+            echo "Release signing secrets not configured. Falling back to debug signing for this release APK."
+          fi
+
           if [ "${BUILD_VARIANT}" = "debug" ]; then
             ./gradlew assembleDebug
           else
