@@ -435,9 +435,11 @@ test('remote image upload falls back to base64 data urls when upload endpoint fa
   try {
     const ApiService = await loadApiServiceClass();
     const service = new ApiService();
-    const imageUrl = await service.uploadImage(new File(['hello'], 'a.png', { type: 'image/png' }));
+    const uploadResult = await service.uploadImageWithStatus(new File(['hello'], 'a.png', { type: 'image/png' }));
 
-    assert.match(imageUrl, /^data:image\/png;base64,/);
+    assert.match(uploadResult.url, /^data:image\/png;base64,/);
+    assert.equal(uploadResult.storage, 'embedded');
+    assert.match(uploadResult.warning ?? '', /缺少图片文件/);
   } finally {
     globalThis.fetch = originalFetch;
   }

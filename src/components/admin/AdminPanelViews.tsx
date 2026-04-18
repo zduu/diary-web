@@ -174,6 +174,7 @@ export function AdminAuthenticatedView({
   const {
     onExportEntries,
     onImportEntries,
+    onRunR2SelfCheck,
     onTogglePasswordSettings,
     onToggleHiddenEntries,
     onToggleWelcomePage,
@@ -197,6 +198,7 @@ export function AdminAuthenticatedView({
         theme={theme}
         onExportEntries={onExportEntries}
         onImportEntries={onImportEntries}
+        onRunR2SelfCheck={onRunR2SelfCheck}
         onTogglePasswordSettings={onTogglePasswordSettings}
         onToggleHiddenEntries={onToggleHiddenEntries}
         onToggleWelcomePage={onToggleWelcomePage}

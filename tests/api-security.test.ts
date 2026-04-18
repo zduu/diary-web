@@ -12,6 +12,7 @@ import { onRequestPost as batchImportEntries, onRequestPut as batchUpdateEntries
 import { onRequestPost as editEntry } from '../functions/api/entries/[id]/edit.ts';
 import { onRequestPost as toggleEntryVisibility } from '../functions/api/entries/[id]/toggle-visibility.ts';
 import { onRequestGet as getAdminSettings } from '../functions/api/settings/admin.ts';
+import { onRequestGet as getR2Diagnostic } from '../functions/api/diagnostics/r2.ts';
 import {
   onRequestDelete as deleteSetting,
   onRequestGet as getSettingByKey,
@@ -304,6 +305,37 @@ class MockD1Database {
   }
 }
 
+class MockR2Bucket {
+  private readonly store = new Map<string, { body: Uint8Array; contentType?: string }>();
+
+  async put(key: string, value: BodyInit | ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }) {
+    const buffer = await new Response(value as BodyInit).arrayBuffer();
+    this.store.set(key, {
+      body: new Uint8Array(buffer),
+      contentType: options?.httpMetadata?.contentType,
+    });
+  }
+
+  async get(key: string) {
+    const stored = this.store.get(key);
+    if (!stored) {
+      return null;
+    }
+
+    return {
+      body: stored.body,
+      size: stored.body.byteLength,
+      httpMetadata: {
+        contentType: stored.contentType,
+      },
+    };
+  }
+
+  async delete(key: string) {
+    this.store.delete(key);
+  }
+}
+
 function sortEntriesDescending(left: EntryRow, right: EntryRow) {
   return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
 }
@@ -317,6 +349,7 @@ function createEnv(overrides?: {
   sessionSecret?: string;
   adminBootstrapPassword?: string;
   appBootstrapPassword?: string;
+  imagesBucket?: R2Bucket;
 }) {
   const db = new MockD1Database();
 
@@ -334,6 +367,7 @@ function createEnv(overrides?: {
     ADMIN_BOOTSTRAP_PASSWORD: overrides?.adminBootstrapPassword,
     APP_BOOTSTRAP_PASSWORD: overrides?.appBootstrapPassword,
     STATS_API_KEY: overrides?.statsApiKey,
+    IMAGES_BUCKET: overrides?.imagesBucket,
   };
 }
 
@@ -700,6 +734,76 @@ test('public settings endpoint does not expose password fields', async () => {
   ]);
   assert.equal('admin_password' in body.data, false);
   assert.equal('app_password' in body.data, false);
+});
+
+test('r2 diagnostic endpoint requires admin and reports binding status', async () => {
+  const unboundEnv = createEnv({
+    settings: {
+      admin_password: 'admin-pass',
+      app_password_enabled: 'false',
+      quick_filters_enabled: 'true',
+      export_enabled: 'true',
+      archive_view_enabled: 'true',
+      welcome_page_enabled: 'true',
+    },
+  });
+
+  const guestResponse = await getR2Diagnostic({
+    request: new Request('https://example.com/api/diagnostics/r2'),
+    env: unboundEnv,
+  });
+  assert.equal(guestResponse.status, 401);
+
+  const adminCookie = await loginAsAdmin(unboundEnv);
+  const unboundResponse = await getR2Diagnostic({
+    request: new Request('https://example.com/api/diagnostics/r2', {
+      headers: { Cookie: adminCookie },
+    }),
+    env: unboundEnv,
+  });
+  assert.equal(unboundResponse.status, 200);
+  const unboundPayload = await parseJson<{ success: boolean; data: { bucketBindingPresent: boolean; message: string } }>(unboundResponse);
+  assert.equal(unboundPayload.success, true);
+  assert.equal(unboundPayload.data.bucketBindingPresent, false);
+  assert.match(unboundPayload.data.message, /IMAGES_BUCKET/);
+
+  const boundEnv = createEnv({
+    settings: {
+      admin_password: 'admin-pass',
+      app_password_enabled: 'false',
+      quick_filters_enabled: 'true',
+      export_enabled: 'true',
+      archive_view_enabled: 'true',
+      welcome_page_enabled: 'true',
+    },
+    imagesBucket: new MockR2Bucket() as unknown as R2Bucket,
+  });
+  const boundAdminCookie = await loginAsAdmin(boundEnv);
+  const boundResponse = await getR2Diagnostic({
+    request: new Request('https://example.com/api/diagnostics/r2', {
+      headers: { Cookie: boundAdminCookie },
+    }),
+    env: boundEnv,
+  });
+  assert.equal(boundResponse.status, 200);
+  const boundPayload = await parseJson<{
+    success: boolean;
+    data: {
+      bucketBindingPresent: boolean;
+      canWrite: boolean;
+      canRead: boolean;
+      canDelete: boolean;
+      readBackMatches: boolean;
+      keyPrefix: string;
+    };
+  }>(boundResponse);
+  assert.equal(boundPayload.success, true);
+  assert.equal(boundPayload.data.bucketBindingPresent, true);
+  assert.equal(boundPayload.data.canWrite, true);
+  assert.equal(boundPayload.data.canRead, true);
+  assert.equal(boundPayload.data.canDelete, true);
+  assert.equal(boundPayload.data.readBackMatches, true);
+  assert.equal(boundPayload.data.keyPrefix, 'diary/');
 });
 
 test('public settings fall back to defaults when stored boolean values are invalid', async () => {

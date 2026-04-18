@@ -17,6 +17,25 @@ type ServiceModeHandlers<T> = {
   remote: () => Promise<T>;
 };
 
+export type ImageUploadStorage = 'embedded' | 'external' | 'r2';
+
+export interface ImageUploadResult {
+  url: string;
+  storage: ImageUploadStorage;
+  warning?: string;
+}
+
+export interface R2SelfCheckResult {
+  bucketBindingPresent: boolean;
+  canWrite: boolean;
+  canRead: boolean;
+  canDelete: boolean;
+  readBackMatches: boolean;
+  testedKey: string | null;
+  keyPrefix: string;
+  message: string;
+}
+
 const signedOutSession: SessionState = {
   isAuthenticated: false,
   isAdminAuthenticated: false,
@@ -36,6 +55,18 @@ async function convertFileToDataUrl(file: File): Promise<string> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const contentType = file.type || 'application/octet-stream';
   return `data:${contentType};base64,${encodeBytesToBase64(bytes)}`;
+}
+
+function inferUploadStorage(url: string): ImageUploadStorage {
+  if (url.startsWith('data:image/')) {
+    return 'embedded';
+  }
+
+  if (url.includes('/api/images/')) {
+    return 'r2';
+  }
+
+  return 'external';
 }
 
 export class ApiService {
@@ -197,9 +228,15 @@ export class ApiService {
     });
   }
 
-  async uploadImage(file: File): Promise<string> {
+  async uploadImageWithStatus(file: File): Promise<ImageUploadResult> {
     return this.runWithCurrentMode({
-      mock: () => this.mockService.uploadImage(file),
+      mock: async () => {
+        const url = await this.mockService.uploadImage(file);
+        return {
+          url,
+          storage: inferUploadStorage(url),
+        };
+      },
       remote: async () => {
         try {
           const formData = new FormData();
@@ -214,12 +251,41 @@ export class ApiService {
             throw new Error('图片上传响应无效');
           }
 
-          return payload.url;
+          return {
+            url: payload.url,
+            storage: inferUploadStorage(payload.url),
+          };
         } catch (error) {
           debugWarn('远程图片上传失败，回退为内嵌 base64 图片:', error);
-          return convertFileToDataUrl(file);
+          const fallbackUrl = await convertFileToDataUrl(file);
+          return {
+            url: fallbackUrl,
+            storage: 'embedded',
+            warning: error instanceof Error ? error.message : '上传接口失败',
+          };
         }
       },
+    });
+  }
+
+  async uploadImage(file: File): Promise<string> {
+    const result = await this.uploadImageWithStatus(file);
+    return result.url;
+  }
+
+  async runR2SelfCheck(): Promise<R2SelfCheckResult> {
+    return this.runWithCurrentMode({
+      mock: async () => ({
+        bucketBindingPresent: false,
+        canWrite: false,
+        canRead: false,
+        canDelete: false,
+        readBackMatches: false,
+        testedKey: null,
+        keyPrefix: 'diary/',
+        message: '当前处于本地模式，未连接 Cloudflare R2',
+      }),
+      remote: () => this.requestRemoteData<R2SelfCheckResult>('/diagnostics/r2', 'R2 自检失败'),
     });
   }
 

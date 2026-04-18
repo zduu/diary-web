@@ -186,6 +186,25 @@ export function AdminPanel({
     exportEntriesToJson(entries);
   };
 
+  const handleRunR2SelfCheck = async () => {
+    try {
+      const result = await apiService.runR2SelfCheck();
+      if (!result.bucketBindingPresent) {
+        showOperationFeedback(`R2 自检结果：未绑定 IMAGES_BUCKET。${result.message}`, true);
+        return;
+      }
+
+      if (result.canWrite && result.canRead && result.canDelete && result.readBackMatches) {
+        showOperationFeedback(`R2 自检通过：绑定正常，前缀 ${result.keyPrefix} 可写入、读取并删除。`);
+        return;
+      }
+
+      showOperationFeedback(`R2 自检异常：${result.message}`, true);
+    } catch (error) {
+      handleAdminOperationError(error, 'R2 自检失败');
+    }
+  };
+
   // 导入日记
   const handleImportEntries = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.target;
@@ -367,6 +386,9 @@ export function AdminPanel({
       void handleExportEntries();
     },
     onImportEntries: handleImportEntries,
+    onRunR2SelfCheck: () => {
+      void handleRunR2SelfCheck();
+    },
     onTogglePasswordSettings: togglePasswordSettings,
     onToggleHiddenEntries: handleToggleHiddenEntries,
     onToggleWelcomePage: () => {

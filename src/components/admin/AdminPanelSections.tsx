@@ -33,6 +33,7 @@ interface PrimaryActionsSectionProps {
   theme: ThemeConfig;
   onExportEntries: () => void;
   onImportEntries: (event: ChangeEvent<HTMLInputElement>) => void;
+  onRunR2SelfCheck: () => void;
   onTogglePasswordSettings: () => void;
   onToggleHiddenEntries: () => void;
   onToggleWelcomePage: () => void;
@@ -186,6 +187,7 @@ export function PrimaryActionsSection({
   theme,
   onExportEntries,
   onImportEntries,
+  onRunR2SelfCheck,
   onTogglePasswordSettings,
   onToggleHiddenEntries,
   onToggleWelcomePage,
@@ -216,6 +218,12 @@ export function PrimaryActionsSection({
       title: '密码设置',
       description: '修改管理密码',
       onClick: onTogglePasswordSettings,
+    },
+    {
+      key: 'r2-self-check',
+      title: 'R2 自检',
+      description: '检查绑定、写入、读取与删除',
+      onClick: onRunR2SelfCheck,
     },
     {
       key: 'hidden',

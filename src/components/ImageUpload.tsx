@@ -21,7 +21,6 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
   const [dragOver, setDragOver] = useState(false);
   const { hideNotification, notification, showNotification } = useNotificationState();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isEmbeddedImageUrl = (value: string) => value.startsWith('data:image/');
 
   const handleFileSelect = useCallback(async (files: FileList) => {
     if (images.length >= maxImages) {
@@ -50,17 +49,30 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
     setUploadProgress({ current: 0, total: filesToUpload.length });
     try {
       const uploadedUrls: string[] = [];
+      const embeddedUploadWarnings: string[] = [];
+      let r2UploadCount = 0;
 
       for (let index = 0; index < filesToUpload.length; index += 1) {
         const file = filesToUpload[index];
         setUploadProgress({ current: index + 1, total: filesToUpload.length });
-        const uploadedUrl = await apiService.uploadImage(file);
-        uploadedUrls.push(uploadedUrl);
+        const result = await apiService.uploadImageWithStatus(file);
+        uploadedUrls.push(result.url);
+
+        if (result.storage === 'r2') {
+          r2UploadCount += 1;
+        }
+
+        if (result.storage === 'embedded' && result.warning) {
+          embeddedUploadWarnings.push(result.warning);
+        }
       }
 
       onImagesChange([...images, ...uploadedUrls]);
-      if (uploadedUrls.some(isEmbeddedImageUrl)) {
-        showNotification(`已保存 ${uploadedUrls.length} 张图片到当前日记，未同步到 R2`, 'success');
+      if (embeddedUploadWarnings.length > 0) {
+        const firstWarning = embeddedUploadWarnings[0];
+        showNotification(`已保存 ${uploadedUrls.length} 张图片，但未同步到 R2：${firstWarning}`, 'error');
+      } else if (r2UploadCount === uploadedUrls.length) {
+        showNotification(`成功上传 ${uploadedUrls.length} 张图片到 R2`, 'success');
       } else {
         showNotification(`成功上传 ${uploadedUrls.length} 张图片`, 'success');
       }

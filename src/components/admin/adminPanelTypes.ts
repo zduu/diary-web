@@ -98,6 +98,7 @@ export interface AdminAuthenticatedEntriesState {
 export interface AdminAuthenticatedActions {
   onExportEntries: () => void;
   onImportEntries: (event: ChangeEvent<HTMLInputElement>) => void;
+  onRunR2SelfCheck: () => void;
   onTogglePasswordSettings: () => void;
   onToggleHiddenEntries: () => void;
   onToggleWelcomePage: () => void;
