@@ -143,48 +143,65 @@ npm run start:remote
 1. **在 Cloudflare 中创建 Pages 项目**
    - 登录 [Cloudflare Dashboard](https://dash.cloudflare.com)
    - 进入 "Workers & Pages" > "Pages"，创建一个 Pages 项目
-   - 将本地构建产物目录设置为 `dist`
+   - 连接你的 Git 仓库
+   - 将构建产物目录设置为 `dist`
 
 2. **配置构建设置**
    - 构建命令: `npm ci && npm run build`
    - 构建输出目录: `dist`
 
-3. **配置数据库**
+3. **以 `wrangler.toml` 管理 Cloudflare 绑定**
+   - 本项目的 Pages Functions 绑定通过 `wrangler.toml` 管理，不通过 Dashboard 手动编辑
+   - 修改绑定后，需要重新部署才能生效
+   - 当前建议至少维护以下配置：
+   ```toml
+   [[d1_databases]]
+   binding = "DB"
+   database_name = "diary-db"
+   database_id = "你的-d1-database-id"
+
+   [[r2_buckets]]
+   binding = "IMAGES_BUCKET"
+   bucket_name = "你的-r2-bucket-name"
+   ```
+
+4. **配置数据库**
    - 在 Cloudflare Dashboard 中创建 D1 数据库 `diary-db`
    - 记录数据库 ID，更新本地 `wrangler.toml` 的 `database_id`
-   - 在 Pages 项目的 "Settings" > "Functions" > "D1 database bindings" 中添加绑定：变量名 `DB`
    - 在 D1 数据库的 "Console" 中执行 `schema.sql` 的内容
    - 不要在生产环境执行 `seed.dev.sql`
 
-4. **配置 Secrets**
+5. **配置 Secrets**
    - 运行 `wrangler secret put SESSION_SECRET`
    - 建议：运行 `wrangler secret put ADMIN_BOOTSTRAP_PASSWORD`
    - 可选：运行 `wrangler secret put APP_BOOTSTRAP_PASSWORD`
    - 可选：运行 `wrangler secret put STATS_API_KEY`
    - 如需使用旧版 Cloudflare Images 上传：运行 `wrangler secret put IMAGES_API_TOKEN`
 
-5. **配置图片上传（可选但推荐）**
-   - 推荐：在 Pages 里绑定 R2 bucket，变量名为 `IMAGES_BUCKET`
+6. **配置图片上传（可选但推荐）**
+   - 推荐：在 `wrangler.toml` 中配置 R2 bucket 绑定，变量名为 `IMAGES_BUCKET`
    - 绑定后系统会自动启用 R2 上传，不需要额外图片 secret
-   - 如不使用 R2，仍可回退到 Cloudflare Images：配置 `IMAGES_ACCOUNT_ID`
+   - 如不使用 R2，仍可回退到 Cloudflare Images
+   - 旧版需要在 `wrangler.toml` / Cloudflare 项目变量中配置 `IMAGES_ACCOUNT_ID`
    - 旧版可选配置 `IMAGES_DELIVERY_URL`（自定义交付域名前缀）
    - 旧版可选配置 `IMAGES_VARIANT`（默认 `public`）
    - 完整说明见 `docs/image-upload-setup.md`
 
-6. **统计接口说明（可选）**
+7. **统计接口说明（可选）**
    - 统计接口的鉴权与调用方式见 `docs/stats-api.md`
 
-7. **完成部署**
-   - 在本地执行 `npm run build`
-   - 将 `dist` 目录用于部署，或按你的交付流程上传到 Cloudflare
+8. **完成部署**
+   - 提交并推送包含 `wrangler.toml` 修改的代码
+   - 等待 Cloudflare Pages 基于当前仓库重新构建部署
+   - 如使用命令行部署，可执行 `npm run build` 后再按你的 Pages 发布流程部署 `dist`
 
-8. **安全迁移检查**
+9. **安全迁移检查**
    - 按 [docs/security-migration.md](docs/security-migration.md) 完成 secrets、密码迁移和验收检查
 
-9. **历史版本平滑切换到最新版（含 master）**
+10. **历史版本平滑切换到最新版（含 master）**
    - 按 [docs/release-master-cutover.md](docs/release-master-cutover.md) 执行备份、预发验证、切主分支和回滚预案
 
-10. **上线前最终核对**
+11. **上线前最终核对**
    - 按 [docs/production-checklist.md](docs/production-checklist.md) 完成构建、配置、安全与 smoke test 检查
    - 可直接执行 `npm run check`，其中已包含 `npm run smoke:dist`、`npm run check:release` 与 `npm run check:cloudflare`
    - 对预发地址可执行 `npm run smoke:remote -- https://你的-preview-域名`
