@@ -37,8 +37,8 @@ export const onRequestGet = async (context: { params: { id: string }; request: R
     const session = await readSession(context.request, context.env);
     const result = await context.env.DB.prepare(
       session.isAdminAuthenticated
-        ? 'SELECT * FROM diary_entries WHERE id = ?'
-        : 'SELECT * FROM diary_entries WHERE id = ? AND hidden = 0'
+        ? 'SELECT * FROM diary_entries WHERE id = ? AND deleted_at IS NULL'
+        : 'SELECT * FROM diary_entries WHERE id = ? AND deleted_at IS NULL AND hidden = 0'
     ).bind(id).first<Record<string, unknown>>();
 
     if (!result) {
@@ -91,7 +91,7 @@ export const onRequestPut = async (context: { params: { id: string }; request: R
       }, { status: bodyStatus ?? 400 });
     }
 
-    const existingEntry = await context.env.DB.prepare('SELECT * FROM diary_entries WHERE id = ?').bind(id).first<Record<string, unknown>>();
+    const existingEntry = await context.env.DB.prepare('SELECT * FROM diary_entries WHERE id = ? AND deleted_at IS NULL').bind(id).first<Record<string, unknown>>();
 
     if (!existingEntry) {
       return jsonResponse<ApiResponse>({
@@ -212,7 +212,7 @@ export const onRequestDelete = async (context: { params: { id: string }; request
   }
 
   try {
-    const existingEntry = await context.env.DB.prepare('SELECT * FROM diary_entries WHERE id = ?').bind(id).first<Record<string, unknown>>();
+    const existingEntry = await context.env.DB.prepare('SELECT * FROM diary_entries WHERE id = ? AND deleted_at IS NULL').bind(id).first<Record<string, unknown>>();
 
     if (!existingEntry) {
       return jsonResponse<ApiResponse>({
@@ -221,7 +221,10 @@ export const onRequestDelete = async (context: { params: { id: string }; request
       }, { status: 404 });
     }
 
-    const result = await context.env.DB.prepare('DELETE FROM diary_entries WHERE id = ?').bind(id).run();
+    const deletedAt = new Date().toISOString();
+    const result = await context.env.DB.prepare(
+      'UPDATE diary_entries SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL'
+    ).bind(deletedAt, deletedAt, id).run();
 
     if (!result.success || result.meta.changes === 0) {
       throw new Error('删除失败');

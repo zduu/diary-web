@@ -20,6 +20,7 @@ export function AdminLoginView({
   remoteSyncBaseUrl,
   remoteSyncToken,
   remoteAdminPassword,
+  syncLocalEntriesOnBind,
   isBindingRemote,
   passwordInput,
   onPasswordInputChange,
@@ -30,6 +31,7 @@ export function AdminLoginView({
   onRemoteSyncBaseUrlChange,
   onRemoteSyncTokenChange,
   onRemoteAdminPasswordChange,
+  onSyncLocalEntriesOnBindChange,
   onBindRemoteSubmit,
   theme,
   getTextColor,
@@ -113,6 +115,24 @@ export function AdminLoginView({
               color: getTextColor('primary'),
             }}
           />
+          <label
+            className="flex items-start gap-3 rounded-lg border px-3 py-3 text-sm"
+            style={{
+              borderColor: theme.colors.border,
+              color: getTextColor('primary'),
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={syncLocalEntriesOnBind}
+              onChange={(event) => onSyncLocalEntriesOnBindChange(event.target.checked)}
+              className="mt-0.5 h-4 w-4"
+              style={{ accentColor: theme.colors.primary }}
+            />
+            <span>
+              {syncLocalEntriesOnBind ? '同步本地已有内容，并与远程内容合并后按时间刷新。' : '只保留远程内容，绑定完成后会用远程快照替换本地当前内容。'}
+            </span>
+          </label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
@@ -319,6 +339,7 @@ export function AdminAuthenticatedView({
     remoteSyncBaseUrl,
     remoteSyncToken,
     remoteAdminPassword,
+    syncLocalEntriesOnBind,
     isBindingRemote,
   } = settingsState;
   const { searchQuery, filteredEntries, entryTimestampLabels } = entriesState;
@@ -326,6 +347,7 @@ export function AdminAuthenticatedView({
     onRemoteSyncBaseUrlChange,
     onRemoteSyncTokenChange,
     onRemoteAdminPasswordChange,
+    onSyncLocalEntriesOnBindChange,
     onShowRemoteBindingForm,
     onHideRemoteBindingForm,
     onBindRemoteSubmit,
@@ -359,11 +381,13 @@ export function AdminAuthenticatedView({
         remoteSyncBaseUrl={remoteSyncBaseUrl}
         remoteSyncToken={remoteSyncToken}
         remoteAdminPassword={remoteAdminPassword}
+        syncLocalEntriesOnBind={syncLocalEntriesOnBind}
         showRemoteBindingForm={showRemoteBindingForm}
         isBindingRemote={isBindingRemote}
         onRemoteSyncBaseUrlChange={onRemoteSyncBaseUrlChange}
         onRemoteSyncTokenChange={onRemoteSyncTokenChange}
         onRemoteAdminPasswordChange={onRemoteAdminPasswordChange}
+        onSyncLocalEntriesOnBindChange={onSyncLocalEntriesOnBindChange}
         onShowRemoteBindingForm={onShowRemoteBindingForm}
         onHideRemoteBindingForm={onHideRemoteBindingForm}
         onBindRemoteSubmit={onBindRemoteSubmit}

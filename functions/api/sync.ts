@@ -15,14 +15,28 @@ import {
 
 type SyncRequest = {
   entries?: DiaryEntry[];
+  lastSyncedAt?: string | null;
 };
 
 type SyncResponse = {
   entries: DiaryEntry[];
   pushedCount: number;
   deletedCount: number;
+  confirmedEntryUuids: string[];
   syncedAt: string;
 };
+
+function parseLastSyncedAt(value: unknown): string | null {
+  if (value == null || value === '') {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  return Number.isNaN(Date.parse(value)) ? null : value;
+}
 
 const SYNC_BODY_MAX_BYTES = 60 * 1024 * 1024;
 const MAX_SYNC_ENTRIES = 500;
@@ -100,6 +114,8 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
 
     let pushedCount = 0;
     let deletedCount = 0;
+    const confirmedEntryUuids = new Set<string>();
+    const lastSyncedAt = parseLastSyncedAt(body.lastSyncedAt);
 
     for (let index = 0; index < entries.length; index += 1) {
       const entry = entries[index]!;
@@ -126,12 +142,22 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
           continue;
         }
 
-        const deleteResult = await context.env.DB.prepare('DELETE FROM diary_entries WHERE entry_uuid = ?')
-          .bind(normalizedEntry.entry_uuid)
-          .run();
+        const existingDeletedAt = getComparableTimestamp(existingEntry.deleted_at);
+        const incomingDeletedAt = getComparableTimestamp(normalizedEntry.updated_at);
 
-        if (deleteResult.success && deleteResult.meta.changes > 0) {
+        if (incomingDeletedAt < Math.max(existingDeletedAt, getComparableTimestamp(existingEntry.updated_at))) {
+          continue;
+        }
+
+        const deleteResult = await context.env.DB.prepare(
+          'UPDATE diary_entries SET deleted_at = ?, updated_at = ? WHERE entry_uuid = ? RETURNING *'
+        )
+          .bind(normalizedEntry.updated_at, normalizedEntry.updated_at, normalizedEntry.entry_uuid)
+          .first<Record<string, unknown>>();
+
+        if (deleteResult) {
           deletedCount += 1;
+          confirmedEntryUuids.add(normalizedEntry.entry_uuid);
           const imageCleanup = await deleteManagedImagesIfUnreferenced({
             env: context.env,
             request: context.request,
@@ -148,8 +174,8 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
 
       if (!existingEntry) {
         const insertedRow = await context.env.DB.prepare(`
-          INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden, created_at, updated_at, deleted_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
           RETURNING *
         `).bind(
           normalizedEntry.entry_uuid,
@@ -171,6 +197,7 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
         }
 
         pushedCount += 1;
+        confirmedEntryUuids.add(normalizedEntry.entry_uuid);
         continue;
       }
 
@@ -193,7 +220,8 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
             tags = ?,
             hidden = ?,
             created_at = ?,
-            updated_at = ?
+            updated_at = ?,
+            deleted_at = NULL
         WHERE entry_uuid = ?
         RETURNING *
       `).bind(
@@ -216,11 +244,18 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
       }
 
       pushedCount += 1;
+      confirmedEntryUuids.add(normalizedEntry.entry_uuid);
     }
 
     const syncedAt = new Date().toISOString();
-    const { results } = await context.env.DB.prepare('SELECT * FROM diary_entries ORDER BY created_at DESC')
-      .all<Record<string, unknown>>();
+    const statement = lastSyncedAt
+      ? context.env.DB.prepare(`
+          SELECT * FROM diary_entries
+          WHERE unixepoch(COALESCE(deleted_at, updated_at)) >= unixepoch(?)
+          ORDER BY unixepoch(COALESCE(deleted_at, updated_at)) DESC
+        `).bind(lastSyncedAt)
+      : context.env.DB.prepare('SELECT * FROM diary_entries WHERE deleted_at IS NULL ORDER BY created_at DESC');
+    const { results } = await statement.all<Record<string, unknown>>();
     const hydratedResults = await ensureEntryUuidsForRows(context.env.DB, results);
 
     return jsonResponse<SyncResponse>({
@@ -229,6 +264,7 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
         entries: hydratedResults.map((row) => formatEntry(row)),
         pushedCount,
         deletedCount,
+        confirmedEntryUuids: [...confirmedEntryUuids],
         syncedAt,
       },
       message: `同步完成：上传/更新 ${pushedCount} 条，删除 ${deletedCount} 条`,

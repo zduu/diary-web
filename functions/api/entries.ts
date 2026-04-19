@@ -19,8 +19,8 @@ export const onRequestGet = async (context: { request: Request; env: Env }): Pro
   try {
     const session = await readSession(context.request, context.env);
     const statement = session.isAdminAuthenticated
-      ? context.env.DB.prepare('SELECT * FROM diary_entries ORDER BY created_at DESC')
-      : context.env.DB.prepare('SELECT * FROM diary_entries WHERE hidden = 0 ORDER BY created_at DESC');
+      ? context.env.DB.prepare('SELECT * FROM diary_entries WHERE deleted_at IS NULL ORDER BY created_at DESC')
+      : context.env.DB.prepare('SELECT * FROM diary_entries WHERE deleted_at IS NULL AND hidden = 0 ORDER BY created_at DESC');
     const { results } = await statement.all<Record<string, unknown>>();
     const hydratedResults = await ensureEntryUuidsForRows(context.env.DB, results);
 
@@ -68,8 +68,8 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     }
 
     const result = await context.env.DB.prepare(`
-      INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden, deleted_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
       RETURNING *
     `).bind(
       entry.entry_uuid,

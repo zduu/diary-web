@@ -15,6 +15,7 @@ export interface RemoteBindingInput {
   baseUrl: string;
   syncToken: string;
   adminPassword: string;
+  syncLocalEntries: boolean;
 }
 
 export interface PublicSettingsResponse {

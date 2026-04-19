@@ -72,7 +72,7 @@ async function collectReferencedManagedImageKeys(
   request: Request,
   excludingEntryId: number
 ): Promise<Set<string>> {
-  const result = await env.DB.prepare('SELECT images FROM diary_entries WHERE id != ?')
+  const result = await env.DB.prepare('SELECT images FROM diary_entries WHERE id != ? AND deleted_at IS NULL')
     .bind(excludingEntryId)
     .all<Record<string, unknown>>();
   const referencedKeys = new Set<string>();

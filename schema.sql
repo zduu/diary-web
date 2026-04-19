@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS diary_entries (
     location TEXT DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted_at DATETIME DEFAULT NULL,
     tags TEXT DEFAULT '[]',
     hidden INTEGER DEFAULT 0
 );
@@ -26,6 +27,9 @@ CREATE TABLE IF NOT EXISTS app_settings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_diary_entries_created_at ON diary_entries(created_at);
+CREATE INDEX IF NOT EXISTS idx_diary_entries_updated_at ON diary_entries(updated_at);
+CREATE INDEX IF NOT EXISTS idx_diary_entries_deleted_at ON diary_entries(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_diary_entries_sync_cursor ON diary_entries(unixepoch(COALESCE(deleted_at, updated_at)));
 CREATE INDEX IF NOT EXISTS idx_diary_entries_mood ON diary_entries(mood);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_diary_entries_entry_uuid ON diary_entries(entry_uuid);
 CREATE INDEX IF NOT EXISTS idx_app_settings_key ON app_settings(setting_key);

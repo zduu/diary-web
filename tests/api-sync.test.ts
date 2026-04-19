@@ -16,6 +16,7 @@ type EntryRow = {
   location: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
   tags: string;
   hidden: number;
 };
@@ -71,13 +72,27 @@ class MockD1Database {
       return value == null ? [] : [{ setting_value: value }];
     }
 
-    if (normalized === 'SELECT * FROM diary_entries ORDER BY created_at DESC') {
-      return [...this.entries].sort((left, right) =>
+    if (normalized === 'SELECT * FROM diary_entries WHERE deleted_at IS NULL ORDER BY created_at DESC') {
+      return [...this.entries]
+        .filter((entry) => entry.deleted_at == null)
+        .sort((left, right) =>
         new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
-      );
+        );
     }
 
-    if (normalized.startsWith('INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden, created_at, updated_at)')) {
+    if (normalized.startsWith('SELECT * FROM diary_entries WHERE unixepoch(COALESCE(deleted_at, updated_at)) >= unixepoch(?)')) {
+      const since = Date.parse(String(args[0]));
+      return [...this.entries]
+        .filter((entry) => {
+          const comparable = Date.parse(entry.deleted_at ?? entry.updated_at);
+          return !Number.isNaN(comparable) && comparable >= since;
+        })
+        .sort((left, right) =>
+          Date.parse(right.deleted_at ?? right.updated_at) - Date.parse(left.deleted_at ?? left.updated_at)
+        );
+    }
+
+    if (normalized.startsWith('INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden, created_at, updated_at, deleted_at)')) {
       const newEntry: EntryRow = {
         id: this.entries.reduce((maxId, entry) => Math.max(maxId, entry.id), 0) + 1,
         entry_uuid: String(args[0]),
@@ -92,12 +107,25 @@ class MockD1Database {
         hidden: Number(args[9]),
         created_at: String(args[10]),
         updated_at: String(args[11]),
+        deleted_at: null,
       };
       this.entries.unshift(newEntry);
       return [newEntry];
     }
 
-    if (normalized.startsWith('UPDATE diary_entries SET title = ?, content = ?, content_type = ?, mood = ?, weather = ?, images = ?, location = ?, tags = ?, hidden = ?, created_at = ?, updated_at = ? WHERE entry_uuid = ? RETURNING *')) {
+    if (normalized.startsWith('UPDATE diary_entries SET deleted_at = ?, updated_at = ? WHERE entry_uuid = ? RETURNING *')) {
+      const entryUuid = String(args[2]);
+      const entry = this.entries.find((item) => item.entry_uuid === entryUuid);
+      if (!entry) {
+        return [];
+      }
+
+      entry.deleted_at = String(args[0]);
+      entry.updated_at = String(args[1]);
+      return [entry];
+    }
+
+    if (normalized.startsWith('UPDATE diary_entries SET title = ?, content = ?, content_type = ?, mood = ?, weather = ?, images = ?, location = ?, tags = ?, hidden = ?, created_at = ?, updated_at = ?, deleted_at = NULL WHERE entry_uuid = ? RETURNING *')) {
       const entryUuid = String(args[11]);
       const entry = this.entries.find((item) => item.entry_uuid === entryUuid);
       if (!entry) {
@@ -115,6 +143,7 @@ class MockD1Database {
       entry.hidden = Number(args[8]);
       entry.created_at = String(args[9]);
       entry.updated_at = String(args[10]);
+      entry.deleted_at = null;
       return [entry];
     }
 
@@ -140,16 +169,6 @@ class MockD1Database {
       return Promise.resolve({
         success: true,
         meta: { changes: hadKey ? 1 : 0, last_row_id: 0 },
-      });
-    }
-
-    if (normalized === 'DELETE FROM diary_entries WHERE entry_uuid = ?') {
-      const entryUuid = String(args[0]);
-      const previousLength = this.entries.length;
-      this.entries = this.entries.filter((entry) => entry.entry_uuid !== entryUuid);
-      return Promise.resolve({
-        success: true,
-        meta: { changes: previousLength - this.entries.length, last_row_id: 0 },
       });
     }
 
@@ -205,6 +224,7 @@ test('sync endpoint upserts newer entries and returns full remote snapshot', asy
       location: null,
       created_at: '2026-04-18T08:00:00.000Z',
       updated_at: '2026-04-18T08:00:00.000Z',
+      deleted_at: null,
       tags: '[]',
       hidden: 0,
     },
@@ -241,10 +261,19 @@ test('sync endpoint upserts newer entries and returns full remote snapshot', asy
   });
 
   assert.equal(response.status, 200);
-  const payload = await parseJson<{ success: boolean; data: { entries: DiaryEntry[]; pushedCount: number; deletedCount: number } }>(response);
+  const payload = await parseJson<{
+    success: boolean;
+    data: {
+      entries: DiaryEntry[];
+      pushedCount: number;
+      deletedCount: number;
+      confirmedEntryUuids: string[];
+    };
+  }>(response);
   assert.equal(payload.success, true);
   assert.equal(payload.data.pushedCount, 2);
   assert.equal(payload.data.deletedCount, 0);
+  assert.deepEqual(payload.data.confirmedEntryUuids.sort(), ['existing-entry', 'new-entry']);
   assert.equal(payload.data.entries.length, 2);
   assert.equal(payload.data.entries[0]?.title, '新建内容');
   assert.equal(payload.data.entries[1]?.title, '新标题');
@@ -264,6 +293,7 @@ test('sync endpoint deletes remote entries for pending_delete payloads', async (
       location: null,
       created_at: '2026-04-18T08:00:00.000Z',
       updated_at: '2026-04-18T08:00:00.000Z',
+      deleted_at: null,
       tags: '[]',
       hidden: 0,
     },
@@ -295,9 +325,17 @@ test('sync endpoint deletes remote entries for pending_delete payloads', async (
   });
 
   assert.equal(response.status, 200);
-  const payload = await parseJson<{ success: boolean; data: { entries: DiaryEntry[]; deletedCount: number } }>(response);
+  const payload = await parseJson<{
+    success: boolean;
+    data: {
+      entries: DiaryEntry[];
+      deletedCount: number;
+      confirmedEntryUuids: string[];
+    };
+  }>(response);
   assert.equal(payload.success, true);
   assert.equal(payload.data.deletedCount, 1);
+  assert.deepEqual(payload.data.confirmedEntryUuids, ['delete-entry']);
   assert.equal(payload.data.entries.length, 0);
 });
 
@@ -330,8 +368,75 @@ test('sync endpoint accepts sync token header for apk cross-origin sync', async 
   });
 
   assert.equal(response.status, 200);
-  const payload = await parseJson<{ success: boolean; data: { pushedCount: number; entries: Array<{ title: string }> } }>(response);
+  const payload = await parseJson<{
+    success: boolean;
+    data: {
+      pushedCount: number;
+      confirmedEntryUuids: string[];
+      entries: Array<{ title: string }>;
+    };
+  }>(response);
   assert.equal(payload.success, true);
   assert.equal(payload.data.pushedCount, 1);
+  assert.deepEqual(payload.data.confirmedEntryUuids, ['header-entry']);
   assert.equal(payload.data.entries[0]?.title, '跨域同步');
+});
+
+test('sync endpoint returns incremental changes when lastSyncedAt is provided', async () => {
+  const env = createEnv([
+    {
+      id: 1,
+      entry_uuid: 'older-entry',
+      title: '更早内容',
+      content: '旧',
+      content_type: 'markdown',
+      mood: 'neutral',
+      weather: 'unknown',
+      images: '[]',
+      location: null,
+      created_at: '2026-04-18T08:00:00.000Z',
+      updated_at: '2026-04-18T08:00:00.000Z',
+      deleted_at: null,
+      tags: '[]',
+      hidden: 0,
+    },
+    {
+      id: 2,
+      entry_uuid: 'newer-entry',
+      title: '较新内容',
+      content: '新',
+      content_type: 'markdown',
+      mood: 'neutral',
+      weather: 'unknown',
+      images: '[]',
+      location: null,
+      created_at: '2026-04-18T09:00:00.000Z',
+      updated_at: '2026-04-18T11:00:00.000Z',
+      deleted_at: null,
+      tags: '[]',
+      hidden: 0,
+    },
+  ]);
+  const adminCookie = await buildAdminCookie(env);
+
+  const response = await syncEntries({
+    request: new Request('https://example.com/api/sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        entries: [],
+        lastSyncedAt: '2026-04-18T10:00:00.000Z',
+      }),
+    }),
+    env,
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await parseJson<{ success: boolean; data: { entries: DiaryEntry[] } }>(response);
+  assert.equal(payload.success, true);
+  assert.equal(payload.data.entries.length, 1);
+  assert.equal(payload.data.entries[0]?.entry_uuid, 'newer-entry');
 });

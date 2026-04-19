@@ -47,7 +47,7 @@ export const onRequestPost = async (context: { params: { id: string }; request: 
       }, { status: bodyStatus ?? 400 });
     }
 
-    const existingEntry = await context.env.DB.prepare('SELECT * FROM diary_entries WHERE id = ?').bind(id).first<Record<string, unknown>>();
+    const existingEntry = await context.env.DB.prepare('SELECT * FROM diary_entries WHERE id = ? AND deleted_at IS NULL').bind(id).first<Record<string, unknown>>();
 
     if (!existingEntry) {
       return jsonResponse<ApiResponse>({

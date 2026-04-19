@@ -57,6 +57,14 @@ export interface RemoteSyncConfig {
   syncToken: string;
 }
 
+type RemoteSyncPayload = {
+  entries: DiaryEntry[];
+  pushedCount: number;
+  deletedCount: number;
+  confirmedEntryUuids?: string[];
+  syncedAt: string;
+};
+
 type ApiEnvelope<T> = {
   success?: boolean;
   data?: T;
@@ -188,6 +196,34 @@ export class ApiService {
   ): Promise<T> {
     const response = await this.remoteClient.request<T>(endpoint, options);
     return this.ensureSuccess(response, fallbackMessage);
+  }
+
+  private async requestDirectRemoteSync(
+    baseUrl: string,
+    syncToken: string,
+    entries: DiaryEntry[],
+    lastSyncedAt?: string | null
+  ): Promise<RemoteSyncPayload> {
+    const response = await fetch(`${normalizeRemoteSyncApiBaseUrl(baseUrl)}/sync`, {
+      method: 'POST',
+      credentials: 'omit',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Sync-Token': syncToken,
+      },
+      body: JSON.stringify({
+        entries,
+        lastSyncedAt: lastSyncedAt ?? undefined,
+      }),
+    });
+
+    const responsePayload = await parseApiEnvelope<RemoteSyncPayload>(response);
+
+    if (!response.ok || !responsePayload?.success || !responsePayload.data) {
+      throw new Error(responsePayload?.error || '同步失败');
+    }
+
+    return responsePayload.data;
   }
 
   private normalizeSettingValue(value: string | boolean | undefined): string | null {
@@ -547,30 +583,6 @@ export class ApiService {
     }
   }
 
-  private async verifyRemoteSyncToken(apiBaseUrl: string, syncToken: string): Promise<void> {
-    const response = await fetch(`${apiBaseUrl}/sync`, {
-      method: 'POST',
-      credentials: 'omit',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Sync-Token': syncToken,
-      },
-      body: JSON.stringify({
-        entries: [],
-      }),
-    });
-    const payload = await parseApiEnvelope<{
-      entries: DiaryEntry[];
-      pushedCount: number;
-      deletedCount: number;
-      syncedAt: string;
-    }>(response);
-
-    if (!response.ok || !payload?.success) {
-      throw new Error(payload?.error || '同步令牌验证失败');
-    }
-  }
-
   async bindRemoteAdmin(config: RemoteBindingInput): Promise<void> {
     if (!this.useMockService) {
       throw new Error('当前处于远程数据模式，无法执行 APK 远程绑定');
@@ -594,12 +606,18 @@ export class ApiService {
 
     const apiBaseUrl = normalizeRemoteSyncApiBaseUrl(baseUrl);
     await this.verifyRemoteAdminPassword(apiBaseUrl, adminPassword);
-    await this.verifyRemoteSyncToken(apiBaseUrl, syncToken);
+
+    const bindingEntries = config.syncLocalEntries
+      ? await this.mockService.getAllLocalEntriesForBinding()
+      : [];
+    const snapshot = await this.requestDirectRemoteSync(baseUrl, syncToken, bindingEntries);
+
     await this.mockService.bindRemoteAdmin({
       baseUrl,
       syncToken,
       adminPassword,
     });
+    await this.mockService.applyRemoteSyncSnapshot(snapshot.entries, snapshot.syncedAt);
     await this.emitResolvedSession(this.mockService.login('admin', adminPassword));
   }
 
@@ -699,60 +717,30 @@ export class ApiService {
   }
 
   async syncLocalEntriesToRemote(): Promise<SyncRemoteResult> {
+    const localSyncStatus = await this.mockService.getLocalSyncStatus();
     const pendingEntries = await this.mockService.getPendingLocalSyncEntries();
     const remoteSyncConfig = await this.mockService.getRemoteSyncConfig();
-    let payload: {
-      entries: DiaryEntry[];
-      pushedCount: number;
-      deletedCount: number;
-      syncedAt: string;
-    };
+    let payload: RemoteSyncPayload;
 
     if (remoteSyncConfig.baseUrl.trim()) {
       if (!remoteSyncConfig.syncToken.trim()) {
         throw new Error('请先填写同步令牌');
       }
 
-      const response = await fetch(`${normalizeRemoteSyncApiBaseUrl(remoteSyncConfig.baseUrl)}/sync`, {
-        method: 'POST',
-        credentials: 'omit',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Sync-Token': remoteSyncConfig.syncToken,
-        },
-        body: JSON.stringify({
-          entries: pendingEntries,
-        }),
-      });
-
-      const responsePayload = await response.json() as {
-        success: boolean;
-        data?: {
-          entries: DiaryEntry[];
-          pushedCount: number;
-          deletedCount: number;
-          syncedAt: string;
-        };
-        error?: string;
-      };
-
-      if (!response.ok || !responsePayload.success || !responsePayload.data) {
-        throw new Error(responsePayload.error || '同步失败');
-      }
-
-      payload = responsePayload.data;
+      payload = await this.requestDirectRemoteSync(
+        remoteSyncConfig.baseUrl,
+        remoteSyncConfig.syncToken,
+        pendingEntries,
+        localSyncStatus.lastSyncedAt
+      );
     } else {
       try {
         payload = this.ensureSuccess(
-          await this.remoteClient.request<{
-            entries: DiaryEntry[];
-            pushedCount: number;
-            deletedCount: number;
-            syncedAt: string;
-          }>('/sync', {
+          await this.remoteClient.request<RemoteSyncPayload>('/sync', {
             method: 'POST',
             body: JSON.stringify({
               entries: pendingEntries,
+              lastSyncedAt: localSyncStatus.lastSyncedAt ?? undefined,
             }),
           }),
           '同步失败'
@@ -766,7 +754,8 @@ export class ApiService {
       }
     }
 
-    await this.mockService.applyRemoteSyncSnapshot(payload.entries, payload.syncedAt);
+    await this.mockService.markLocalEntriesSynced(payload.confirmedEntryUuids ?? [], payload.syncedAt);
+    await this.mockService.applyIncrementalRemoteSync(payload.entries, payload.syncedAt);
 
     return {
       ...payload,

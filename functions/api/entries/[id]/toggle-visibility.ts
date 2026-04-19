@@ -28,7 +28,7 @@ export const onRequestPost = async (context: { params: { id: string }; request: 
   }
 
   try {
-    const existingEntry = await context.env.DB.prepare('SELECT hidden FROM diary_entries WHERE id = ?').bind(id).first<{ hidden: number }>();
+    const existingEntry = await context.env.DB.prepare('SELECT hidden FROM diary_entries WHERE id = ? AND deleted_at IS NULL').bind(id).first<{ hidden: number }>();
 
     if (!existingEntry) {
       return jsonResponse<ApiResponse>({

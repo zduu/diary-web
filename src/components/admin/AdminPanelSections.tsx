@@ -51,11 +51,13 @@ interface SyncSettingsSectionProps {
   remoteSyncBaseUrl: string;
   remoteSyncToken: string;
   remoteAdminPassword: string;
+  syncLocalEntriesOnBind: boolean;
   showRemoteBindingForm: boolean;
   isBindingRemote: boolean;
   onRemoteSyncBaseUrlChange: (value: string) => void;
   onRemoteSyncTokenChange: (value: string) => void;
   onRemoteAdminPasswordChange: (value: string) => void;
+  onSyncLocalEntriesOnBindChange: (value: boolean) => void;
   onShowRemoteBindingForm: () => void;
   onHideRemoteBindingForm: () => void;
   onBindRemoteSubmit: () => void;
@@ -108,10 +110,12 @@ interface RemoteBindingFormProps {
   remoteSyncBaseUrl: string;
   remoteSyncToken: string;
   remoteAdminPassword: string;
+  syncLocalEntriesOnBind: boolean;
   isBindingRemote: boolean;
   onRemoteSyncBaseUrlChange: (value: string) => void;
   onRemoteSyncTokenChange: (value: string) => void;
   onRemoteAdminPasswordChange: (value: string) => void;
+  onSyncLocalEntriesOnBindChange: (value: boolean) => void;
   onSubmit: () => void;
   onCancel?: () => void;
 }
@@ -248,10 +252,12 @@ function RemoteBindingForm({
   remoteSyncBaseUrl,
   remoteSyncToken,
   remoteAdminPassword,
+  syncLocalEntriesOnBind,
   isBindingRemote,
   onRemoteSyncBaseUrlChange,
   onRemoteSyncTokenChange,
   onRemoteAdminPasswordChange,
+  onSyncLocalEntriesOnBindChange,
   onSubmit,
   onCancel,
 }: RemoteBindingFormProps) {
@@ -307,6 +313,25 @@ function RemoteBindingForm({
             color: theme.colors.text,
           }}
         />
+        <label
+          className="flex items-start gap-3 rounded-lg border px-3 py-3 text-sm"
+          style={{
+            backgroundColor: theme.colors.surface,
+            borderColor: theme.colors.border,
+            color: theme.colors.text,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={syncLocalEntriesOnBind}
+            onChange={(event) => onSyncLocalEntriesOnBindChange(event.target.checked)}
+            className="mt-0.5 h-4 w-4"
+            style={{ accentColor: theme.colors.primary }}
+          />
+          <span>
+            {syncLocalEntriesOnBind ? '同步本地已有内容，并与远程内容合并后按时间刷新。' : '只保留远程内容，绑定完成后会用远程快照替换本地当前内容。'}
+          </span>
+        </label>
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row">
@@ -343,11 +368,13 @@ export function SyncSettingsSection({
   remoteSyncBaseUrl,
   remoteSyncToken,
   remoteAdminPassword,
+  syncLocalEntriesOnBind,
   showRemoteBindingForm,
   isBindingRemote,
   onRemoteSyncBaseUrlChange,
   onRemoteSyncTokenChange,
   onRemoteAdminPasswordChange,
+  onSyncLocalEntriesOnBindChange,
   onShowRemoteBindingForm,
   onHideRemoteBindingForm,
   onBindRemoteSubmit,
@@ -395,10 +422,12 @@ export function SyncSettingsSection({
             remoteSyncBaseUrl={remoteSyncBaseUrl}
             remoteSyncToken={remoteSyncToken}
             remoteAdminPassword={remoteAdminPassword}
+            syncLocalEntriesOnBind={syncLocalEntriesOnBind}
             isBindingRemote={isBindingRemote}
             onRemoteSyncBaseUrlChange={onRemoteSyncBaseUrlChange}
             onRemoteSyncTokenChange={onRemoteSyncTokenChange}
             onRemoteAdminPasswordChange={onRemoteAdminPasswordChange}
+            onSyncLocalEntriesOnBindChange={onSyncLocalEntriesOnBindChange}
             onSubmit={onBindRemoteSubmit}
             onCancel={onHideRemoteBindingForm}
           />

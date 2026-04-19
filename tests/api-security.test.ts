@@ -31,6 +31,7 @@ type EntryRow = {
   location: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
   tags: string;
   hidden: number;
 };
@@ -88,34 +89,39 @@ class MockD1Database {
         .map((key) => ({ setting_key: key, setting_value: this.settings.get(key)! }));
     }
 
-    if (normalized === 'SELECT * FROM diary_entries ORDER BY created_at DESC') {
-      return [...this.entries].sort(sortEntriesDescending);
+    if (normalized === 'SELECT * FROM diary_entries WHERE deleted_at IS NULL ORDER BY created_at DESC') {
+      return [...this.entries].filter((entry) => entry.deleted_at == null).sort(sortEntriesDescending);
     }
 
-    if (normalized === 'SELECT * FROM diary_entries WHERE hidden = 0 ORDER BY created_at DESC') {
-      return [...this.entries].filter((entry) => entry.hidden === 0).sort(sortEntriesDescending);
+    if (normalized === 'SELECT * FROM diary_entries WHERE deleted_at IS NULL AND hidden = 0 ORDER BY created_at DESC') {
+      return [...this.entries].filter((entry) => entry.deleted_at == null && entry.hidden === 0).sort(sortEntriesDescending);
     }
 
-    if (normalized === 'SELECT * FROM diary_entries WHERE id = ?') {
+    if (normalized === 'SELECT * FROM diary_entries WHERE id = ? AND deleted_at IS NULL') {
       const id = Number(args[0]);
-      return this.entries.filter((entry) => entry.id === id);
+      return this.entries.filter((entry) => entry.id === id && entry.deleted_at == null);
     }
 
-    if (normalized === 'SELECT images FROM diary_entries WHERE id != ?') {
+    if (normalized === 'SELECT images FROM diary_entries WHERE id != ? AND deleted_at IS NULL') {
       const id = Number(args[0]);
       return this.entries
-        .filter((entry) => entry.id !== id)
+        .filter((entry) => entry.id !== id && entry.deleted_at == null)
         .map((entry) => ({ images: entry.images }));
     }
 
-    if (normalized === 'SELECT * FROM diary_entries WHERE id = ? AND hidden = 0') {
+    if (normalized === 'SELECT * FROM diary_entries WHERE id = ? AND deleted_at IS NULL AND hidden = 0') {
       const id = Number(args[0]);
-      return this.entries.filter((entry) => entry.id === id && entry.hidden === 0);
+      return this.entries.filter((entry) => entry.id === id && entry.deleted_at == null && entry.hidden === 0);
     }
 
-    if (normalized === 'SELECT id FROM diary_entries WHERE id = ?') {
+    if (normalized === 'SELECT id FROM diary_entries WHERE id = ? AND deleted_at IS NULL') {
       const id = Number(args[0]);
-      return this.entries.filter((entry) => entry.id === id).map((entry) => ({ id: entry.id }));
+      return this.entries.filter((entry) => entry.id === id && entry.deleted_at == null).map((entry) => ({ id: entry.id }));
+    }
+
+    if (normalized === 'SELECT hidden FROM diary_entries WHERE id = ? AND deleted_at IS NULL') {
+      const id = Number(args[0]);
+      return this.entries.filter((entry) => entry.id === id && entry.deleted_at == null).map((entry) => ({ hidden: entry.hidden }));
     }
 
     if (normalized === 'SELECT created_at FROM diary_entries ORDER BY created_at DESC') {
@@ -124,7 +130,7 @@ class MockD1Database {
         .map((entry) => ({ created_at: entry.created_at }));
     }
 
-    if (normalized.startsWith('INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden)')) {
+    if (normalized.startsWith('INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden')) {
       const createdAt = new Date().toISOString();
       const newEntry: EntryRow = {
         id: this.getNextEntryId(),
@@ -140,12 +146,13 @@ class MockD1Database {
         hidden: Number(args[9]),
         created_at: createdAt,
         updated_at: createdAt,
+        deleted_at: null,
       };
       this.entries.unshift(newEntry);
       return [newEntry];
     }
 
-    if (normalized.startsWith('INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden, created_at, updated_at)')) {
+    if (normalized.startsWith('INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden, created_at, updated_at, deleted_at)')) {
       const newEntry: EntryRow = {
         id: this.getNextEntryId(),
         entry_uuid: args[0] == null ? null : String(args[0]),
@@ -160,6 +167,7 @@ class MockD1Database {
         hidden: Number(args[9]),
         created_at: String(args[10]),
         updated_at: String(args[11]),
+        deleted_at: null,
       };
       this.entries.unshift(newEntry);
       return [newEntry];
@@ -181,6 +189,7 @@ class MockD1Database {
         hidden: Number(args[8]),
         created_at: String(args[9]),
         updated_at: updatedAt,
+        deleted_at: null,
       };
       this.entries.unshift(newEntry);
       return [newEntry];
@@ -235,6 +244,9 @@ class MockD1Database {
             break;
           case 'created_at':
             entry.created_at = String(value);
+            break;
+          case 'deleted_at':
+            entry.deleted_at = value == null ? null : String(value);
             break;
           default:
             throw new Error(`Unsupported UPDATE column in test mock: ${column}`);
@@ -323,13 +335,16 @@ class MockD1Database {
       });
     }
 
-    if (normalized === 'DELETE FROM diary_entries WHERE id = ?') {
-      const id = Number(args[0]);
-      const previousLength = this.entries.length;
-      this.entries = this.entries.filter((entry) => entry.id !== id);
+    if (normalized === 'UPDATE diary_entries SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL') {
+      const id = Number(args[2]);
+      const entry = this.entries.find((item) => item.id === id && item.deleted_at == null);
+      if (entry) {
+        entry.deleted_at = String(args[0]);
+        entry.updated_at = String(args[1]);
+      }
       return Promise.resolve({
         success: true,
-        meta: { changes: previousLength - this.entries.length, last_row_id: 0 },
+        meta: { changes: entry ? 1 : 0, last_row_id: 0 },
       });
     }
 
@@ -1519,7 +1534,7 @@ test('write endpoints require admin session and allow create update delete after
   });
   assert.equal(deleteResponse.status, 200);
   const db = env.DB as unknown as MockD1Database;
-  assert.equal(db.entries.some((entry) => entry.id === 1), false);
+  assert.equal(db.entries.find((entry) => entry.id === 1)?.deleted_at != null, true);
 });
 
 test('deleting an entry also removes its unreferenced managed r2 images', async () => {

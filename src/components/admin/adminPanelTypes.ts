@@ -63,6 +63,7 @@ export interface AdminLoginViewProps {
   remoteSyncBaseUrl: string;
   remoteSyncToken: string;
   remoteAdminPassword: string;
+  syncLocalEntriesOnBind: boolean;
   isBindingRemote: boolean;
   passwordInput: string;
   onPasswordInputChange: (value: string) => void;
@@ -73,6 +74,7 @@ export interface AdminLoginViewProps {
   onRemoteSyncBaseUrlChange: (value: string) => void;
   onRemoteSyncTokenChange: (value: string) => void;
   onRemoteAdminPasswordChange: (value: string) => void;
+  onSyncLocalEntriesOnBindChange: (value: boolean) => void;
   onBindRemoteSubmit: () => void;
   theme: ThemeConfig;
   getTextColor: AdminTextColorGetter;
@@ -114,6 +116,7 @@ export interface AdminAuthenticatedViewSettingsState extends AdminAuthenticatedS
   remoteSyncBaseUrl: string;
   remoteSyncToken: string;
   remoteAdminPassword: string;
+  syncLocalEntriesOnBind: boolean;
   isBindingRemote: boolean;
 }
 
@@ -127,6 +130,7 @@ export interface AdminAuthenticatedActions {
   onRemoteSyncBaseUrlChange: (value: string) => void;
   onRemoteSyncTokenChange: (value: string) => void;
   onRemoteAdminPasswordChange: (value: string) => void;
+  onSyncLocalEntriesOnBindChange: (value: boolean) => void;
   onShowRemoteBindingForm: () => void;
   onHideRemoteBindingForm: () => void;
   onBindRemoteSubmit: () => void;

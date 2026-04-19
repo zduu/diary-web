@@ -117,3 +117,4 @@ npm run android:apk:release
 - Web 端部署仍然使用 Cloudflare Pages / Functions / D1。
 - 调试 APK 切换到 `远程 Pages` 模式后，会直接访问线上 API。
 - 发布 APK 不再开放模式切换，改为使用管理员面板里的远程绑定和手动同步。
+- 如果远端 D1 是旧版本升级上来的数据库，先执行 `migrations/2026-04-18-add-entry-uuid.sql`，再使用新版 APK 做远程绑定和同步；否则旧云端内容的同步兼容性无法保证。

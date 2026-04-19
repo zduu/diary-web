@@ -192,6 +192,7 @@ Android APK 推荐只通过 GitHub Actions 构建，不在本机安装 Android S
    - 在 Pages 项目的 `Settings > Bindings` 中把该数据库绑定到变量名 `DB`
    - 在 D1 数据库的 "Console" 中执行 `schema.sql` 的内容
    - 如果你的数据库是旧版本升级到当前版本，还需要额外执行 `migrations/2026-04-18-add-entry-uuid.sql`
+   - 旧版云端数据库在启用新版 APK 远程绑定与手动同步前，必须先完成这次 `entry_uuid` 迁移，否则历史内容与后续同步兼容性无法保证
    - 不要在生产环境执行 `seed.dev.sql`
 
 5. **配置 Secrets**

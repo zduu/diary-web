@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DiaryEntry } from '../types/index.ts';
 import {
+  applyIncrementalRemoteEntries,
   buildDiarySyncStatus,
   createLocallyCreatedDiaryEntry,
   listPendingSyncEntries,
@@ -79,5 +80,34 @@ describe('entrySync', () => {
     expect(afterSync).toHaveLength(1);
     expect(afterSync[0]?.sync_state).toBe('synced');
     expect(afterSync[0]?.last_synced_at).toBe('2026-04-18T11:00:00.000Z');
+  });
+
+  it('keeps untouched local pending entries during incremental remote merge', () => {
+    const pendingCreate = createLocallyCreatedDiaryEntry({
+      ...baseEntry,
+      id: 2,
+      entry_uuid: 'local-pending-entry',
+    });
+
+    const merged = applyIncrementalRemoteEntries(
+      [pendingCreate],
+      [{
+        ...baseEntry,
+        id: 3,
+        entry_uuid: 'remote-entry',
+        title: '远端新增',
+        created_at: '2026-04-18T11:00:00.000Z',
+        updated_at: '2026-04-18T11:00:00.000Z',
+      }],
+      '2026-04-18T12:00:00.000Z'
+    );
+
+    const localEntry = merged.find((entry) => entry.entry_uuid === 'local-pending-entry');
+    const remoteEntry = merged.find((entry) => entry.entry_uuid === 'remote-entry');
+
+    expect(localEntry?.sync_state).toBe('pending_create');
+    expect(localEntry?.last_synced_at).toBeNull();
+    expect(remoteEntry?.sync_state).toBe('synced');
+    expect(remoteEntry?.last_synced_at).toBe('2026-04-18T12:00:00.000Z');
   });
 });

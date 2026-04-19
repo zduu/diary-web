@@ -14,6 +14,7 @@ import {
   isPublicBooleanSettingKey,
 } from './publicSettingsSchema.ts';
 import {
+  applyIncrementalRemoteEntries,
   buildDiarySyncStatus,
   createLocallyCreatedDiaryEntry,
   isDiaryEntryDeleted,
@@ -251,6 +252,20 @@ export class MockApiService {
 
     if (trimmedValue.length > this.MAX_PASSWORD_LENGTH) {
       throw new Error(`${label}长度不能超过 ${this.MAX_PASSWORD_LENGTH} 位`);
+    }
+
+    return trimmedValue;
+  }
+
+  private validateRemoteAdminPassword(value: string): string {
+    const trimmedValue = value.trim();
+
+    if (!trimmedValue) {
+      throw new Error('请输入远程管理员密码');
+    }
+
+    if (trimmedValue.length > this.MAX_PASSWORD_LENGTH) {
+      throw new Error(`远程管理员密码长度不能超过 ${this.MAX_PASSWORD_LENGTH} 位`);
     }
 
     return trimmedValue;
@@ -766,6 +781,10 @@ export class MockApiService {
     return this.runMockRequest(30, async () => buildDiarySyncStatus(await this.getStoredEntries()));
   }
 
+  async getAllLocalEntriesForBinding(): Promise<DiaryEntry[]> {
+    return this.getStoredEntries();
+  }
+
   async getPendingLocalSyncEntries(): Promise<DiaryEntry[]> {
     return this.runMockRequest(30, async () => listPendingSyncEntries(await this.getStoredEntries()));
   }
@@ -791,6 +810,13 @@ export class MockApiService {
       });
 
       await this.saveEntries(normalizedEntries);
+    });
+  }
+
+  async applyIncrementalRemoteSync(entries: DiaryEntry[], syncedAt: string): Promise<void> {
+    return this.runMockRequest(30, async () => {
+      const currentEntries = await this.getStoredEntries();
+      await this.saveEntries(applyIncrementalRemoteEntries(currentEntries, entries, syncedAt));
     });
   }
 
@@ -824,7 +850,7 @@ export class MockApiService {
   }
 
   async bindRemoteAdmin(config: { baseUrl: string; syncToken: string; adminPassword: string }): Promise<void> {
-    const trimmedPassword = this.validatePasswordLength(config.adminPassword, '管理员密码');
+    const trimmedPassword = this.validateRemoteAdminPassword(config.adminPassword);
 
     return this.runMockRequest(60, async () => {
       const passwordHash = await createLocalPasswordHash(trimmedPassword);

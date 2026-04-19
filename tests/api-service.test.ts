@@ -563,6 +563,7 @@ test('bindRemoteAdmin verifies remote credentials and switches local admin auth 
       baseUrl: 'https://diary.example.com/',
       syncToken: 'remote-sync-token',
       adminPassword: 'remote-admin-pass',
+      syncLocalEntries: false,
     });
 
     let session = await service.getSession();
@@ -583,6 +584,63 @@ test('bindRemoteAdmin verifies remote credentials and switches local admin auth 
     assert.equal(profile.remoteBound, true);
     assert.equal(profile.requiresPassword, true);
     assert.equal(profile.remoteSyncBaseUrl, 'https://diary.example.com');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('bindRemoteAdmin accepts short remote passwords that already exist on the server', async () => {
+  localStorageMock.clear();
+  localStorageMock.setItem('diary_force_local', 'true');
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input.url;
+
+    if (url === 'https://diary.example.com/api/auth/login') {
+      const payload = JSON.parse(String(init?.body ?? '{}')) as { password?: string; scope?: string };
+      assert.equal(payload.scope, 'admin');
+      assert.equal(payload.password, '12345');
+
+      return jsonResponse({
+        success: true,
+        data: {
+          isAuthenticated: true,
+          isAdminAuthenticated: true,
+        },
+      });
+    }
+
+    if (url === 'https://diary.example.com/api/sync') {
+      return jsonResponse({
+        success: true,
+        data: {
+          entries: [],
+          pushedCount: 0,
+          deletedCount: 0,
+          syncedAt: '2026-04-19T00:00:00.000Z',
+        },
+      });
+    }
+
+    throw new Error(`Unexpected fetch URL in test: ${url}`);
+  };
+
+  try {
+    const ApiService = await loadApiServiceClass();
+    const service = new ApiService();
+
+    await service.bindRemoteAdmin({
+      baseUrl: 'https://diary.example.com/',
+      syncToken: 'remote-sync-token',
+      adminPassword: '12345',
+      syncLocalEntries: false,
+    });
+
+    await service.logout();
+
+    const session = await service.loginAdmin('12345');
+    assert.equal(session.isAdminAuthenticated, true);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -654,10 +712,11 @@ test('native release build locks data mode to local even when a legacy remote fl
   }
 });
 
-test('syncLocalEntriesToRemote pushes pending local entries and replaces local snapshot from remote', async () => {
+test('syncLocalEntriesToRemote pushes pending local entries and merges incremental remote changes', async () => {
   localStorageMock.clear();
   localStorageMock.setItem('diary_force_local', 'true');
 
+  let expectedEntryUuid = '';
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input.url;
@@ -666,18 +725,24 @@ test('syncLocalEntriesToRemote pushes pending local entries and replaces local s
       throw new Error(`Unexpected fetch URL in test: ${url}`);
     }
 
-    const parsedBody = JSON.parse(String(init?.body ?? '{}')) as { entries?: Array<{ title?: string; sync_state?: string }> };
+    const parsedBody = JSON.parse(String(init?.body ?? '{}')) as {
+      lastSyncedAt?: string;
+      entries?: Array<{ title?: string; sync_state?: string; entry_uuid?: string }>;
+    };
     assert.equal(new Headers(init?.headers).get('X-Sync-Token'), 'remote-sync-token');
     assert.equal(Array.isArray(parsedBody.entries), true);
     assert.equal(parsedBody.entries?.length, 1);
     assert.equal(parsedBody.entries?.[0]?.title, '待同步日记');
     assert.equal(parsedBody.entries?.[0]?.sync_state, 'pending_create');
+    assert.equal(parsedBody.entries?.[0]?.entry_uuid, expectedEntryUuid);
+    assert.equal(parsedBody.lastSyncedAt, undefined);
 
     return jsonResponse({
       success: true,
       data: {
         pushedCount: 1,
         deletedCount: 0,
+        confirmedEntryUuids: [expectedEntryUuid],
         syncedAt: '2026-04-18T13:00:00.000Z',
         entries: [
           {
@@ -704,7 +769,7 @@ test('syncLocalEntriesToRemote pushes pending local entries and replaces local s
             images: [],
             tags: [],
             hidden: false,
-            entry_uuid: 'synced-local-entry',
+            entry_uuid: expectedEntryUuid,
             created_at: '2026-04-18T12:00:00.000Z',
             updated_at: '2026-04-18T12:00:00.000Z',
           },
@@ -716,6 +781,8 @@ test('syncLocalEntriesToRemote pushes pending local entries and replaces local s
   try {
     const ApiService = await loadApiServiceClass();
     const service = new ApiService();
+    service.setDefaultDataEnabled(false);
+    service.clearLocalData();
     await service.loginAdmin('admin123');
     await service.saveRemoteSyncConfig({
       baseUrl: 'https://diary.example.com',
@@ -725,6 +792,7 @@ test('syncLocalEntriesToRemote pushes pending local entries and replaces local s
       title: '待同步日记',
       content: '本地内容',
     });
+    expectedEntryUuid = createdEntry.entry_uuid ?? '';
 
     const syncResult = await service.syncLocalEntriesToRemote();
     assert.equal(syncResult.pushedCount, 1);
@@ -733,14 +801,301 @@ test('syncLocalEntriesToRemote pushes pending local entries and replaces local s
 
     const allEntries = await service.getAllEntries();
     assert.equal(allEntries.length, 2);
-    assert.equal(allEntries[0]?.title, '云端已有');
-    assert.equal(allEntries[1]?.title, '待同步日记');
-    assert.equal(allEntries[1]?.entry_uuid, 'synced-local-entry');
-    assert.equal(allEntries.some((entry) => entry.entry_uuid === createdEntry.entry_uuid), false);
+    assert.equal(allEntries[0]?.title, '待同步日记');
+    assert.equal(allEntries[0]?.entry_uuid, expectedEntryUuid);
+    assert.equal(allEntries[1]?.title, '云端已有');
 
     const syncStatus = await service.getLocalSyncStatus();
     assert.equal(syncStatus.totalPending, 0);
     assert.equal(syncStatus.lastSyncedAt, '2026-04-18T13:00:00.000Z');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('syncLocalEntriesToRemote keeps local pending entries when the remote side does not confirm them', async () => {
+  localStorageMock.clear();
+  localStorageMock.setItem('diary_force_local', 'true');
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input.url;
+
+    if (url !== 'https://diary.example.com/api/sync') {
+      throw new Error(`Unexpected fetch URL in test: ${url}`);
+    }
+
+    const parsedBody = JSON.parse(String(init?.body ?? '{}')) as {
+      entries?: Array<{ title?: string; entry_uuid?: string }>;
+    };
+    assert.equal(parsedBody.entries?.length, 1);
+
+    return jsonResponse({
+      success: true,
+      data: {
+        pushedCount: 0,
+        deletedCount: 0,
+        confirmedEntryUuids: [],
+        syncedAt: '2026-04-18T13:30:00.000Z',
+        entries: [
+          {
+            id: 201,
+            entry_uuid: 'remote-entry-201',
+            title: '远端新增',
+            content: '远端内容',
+            content_type: 'markdown',
+            mood: 'neutral',
+            weather: 'unknown',
+            images: [],
+            tags: [],
+            hidden: false,
+            created_at: '2026-04-18T09:30:00.000Z',
+            updated_at: '2026-04-18T09:30:00.000Z',
+          },
+        ],
+      },
+    });
+  };
+
+  try {
+    const ApiService = await loadApiServiceClass();
+    const service = new ApiService();
+    service.setDefaultDataEnabled(false);
+    service.clearLocalData();
+    await service.loginAdmin('admin123');
+    await service.saveRemoteSyncConfig({
+      baseUrl: 'https://diary.example.com',
+      syncToken: 'remote-sync-token',
+    });
+
+    const createdEntry = await service.createEntry({
+      title: '仍待确认',
+      content: '本地内容',
+    });
+
+    const syncResult = await service.syncLocalEntriesToRemote();
+    assert.equal(syncResult.pushedCount, 0);
+    assert.equal(syncResult.remoteCount, 1);
+
+    const entries = await service.getAllEntries();
+    assert.equal(entries.length, 2);
+    assert.equal(entries.some((entry) => entry.entry_uuid === createdEntry.entry_uuid), true);
+
+    const pendingEntries = await service.getPendingLocalSyncEntries();
+    assert.equal(pendingEntries.length, 1);
+    assert.equal(pendingEntries[0]?.entry_uuid, createdEntry.entry_uuid);
+
+    const syncStatus = await service.getLocalSyncStatus();
+    assert.equal(syncStatus.totalPending, 1);
+    assert.equal(syncStatus.lastSyncedAt, '2026-04-18T13:30:00.000Z');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('bindRemoteAdmin with remote-only mode replaces local snapshot with remote entries', async () => {
+  localStorageMock.clear();
+  localStorageMock.setItem('diary_force_local', 'true');
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input.url;
+
+    if (url === 'https://diary.example.com/api/auth/login') {
+      return jsonResponse({
+        success: true,
+        data: {
+          isAuthenticated: true,
+          isAdminAuthenticated: true,
+        },
+      });
+    }
+
+    if (url === 'https://diary.example.com/api/sync') {
+      const payload = JSON.parse(String(init?.body ?? '{}')) as { entries?: unknown[] };
+      assert.deepEqual(payload.entries, []);
+
+      return jsonResponse({
+        success: true,
+        data: {
+          pushedCount: 0,
+          deletedCount: 0,
+          syncedAt: '2026-04-19T02:00:00.000Z',
+          entries: [
+            {
+              id: 201,
+              entry_uuid: 'remote-only-entry',
+              title: '远程内容',
+              content: '仅保留远程',
+              content_type: 'markdown',
+              mood: 'neutral',
+              weather: 'unknown',
+              images: [],
+              tags: [],
+              hidden: false,
+              created_at: '2026-04-19T01:00:00.000Z',
+              updated_at: '2026-04-19T01:00:00.000Z',
+            },
+          ],
+        },
+      });
+    }
+
+    throw new Error(`Unexpected fetch URL in test: ${url}`);
+  };
+
+  try {
+    const ApiService = await loadApiServiceClass();
+    const service = new ApiService();
+
+    await service.bindRemoteAdmin({
+      baseUrl: 'https://diary.example.com/',
+      syncToken: 'remote-sync-token',
+      adminPassword: 'remote-admin-pass',
+      syncLocalEntries: false,
+    });
+
+    const allEntries = await service.getAllEntries();
+    assert.deepEqual(allEntries.map((entry) => entry.entry_uuid), ['remote-only-entry']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('bindRemoteAdmin with local sync mode uploads existing local entries before applying remote snapshot', async () => {
+  localStorageMock.clear();
+  localStorageMock.setItem('diary_force_local', 'true');
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input.url;
+
+    if (url === 'https://diary.example.com/api/auth/login') {
+      return jsonResponse({
+        success: true,
+        data: {
+          isAuthenticated: true,
+          isAdminAuthenticated: true,
+        },
+      });
+    }
+
+    if (url === 'https://diary.example.com/api/sync') {
+      const payload = JSON.parse(String(init?.body ?? '{}')) as { entries?: Array<{ entry_uuid?: string }> };
+      assert.equal(Array.isArray(payload.entries), true);
+      assert.equal((payload.entries?.length ?? 0) > 0, true);
+      assert.equal(payload.entries?.some((entry) => entry.entry_uuid === 'demo-entry-1'), true);
+
+      return jsonResponse({
+        success: true,
+        data: {
+          pushedCount: payload.entries?.length ?? 0,
+          deletedCount: 0,
+          syncedAt: '2026-04-19T03:00:00.000Z',
+          entries: [
+            {
+              id: 301,
+              entry_uuid: 'remote-merged-entry',
+              title: '远程已有',
+              content: '远程内容',
+              content_type: 'markdown',
+              mood: 'neutral',
+              weather: 'unknown',
+              images: [],
+              tags: [],
+              hidden: false,
+              created_at: '2026-04-19T02:00:00.000Z',
+              updated_at: '2026-04-19T02:00:00.000Z',
+            },
+            {
+              id: 1,
+              entry_uuid: 'demo-entry-1',
+              title: '公园散步的美好时光',
+              content: '今天天气很好，和朋友一起去**公园散步**，心情特别愉快。\n\n看到了很多美丽的花朵 🌸，还遇到了可爱的小狗 🐕。和朋友聊了很多有趣的话题。\n\n> 生活中的小美好总是让人感到幸福',
+              content_type: 'markdown',
+              mood: 'happy',
+              weather: 'sunny',
+              images: [],
+              tags: ['散步', '朋友', '公园'],
+              hidden: false,
+              created_at: '2026-04-18T00:00:00.000Z',
+              updated_at: '2026-04-18T00:00:00.000Z',
+            },
+          ],
+        },
+      });
+    }
+
+    throw new Error(`Unexpected fetch URL in test: ${url}`);
+  };
+
+  try {
+    const ApiService = await loadApiServiceClass();
+    const service = new ApiService();
+
+    await service.bindRemoteAdmin({
+      baseUrl: 'https://diary.example.com/',
+      syncToken: 'remote-sync-token',
+      adminPassword: 'remote-admin-pass',
+      syncLocalEntries: true,
+    });
+
+    const allEntries = await service.getAllEntries();
+    assert.deepEqual(allEntries.map((entry) => entry.entry_uuid), ['remote-merged-entry', 'demo-entry-1']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('bindRemoteAdmin does not persist local binding when sync token is invalid', async () => {
+  localStorageMock.clear();
+  localStorageMock.setItem('diary_force_local', 'true');
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = typeof input === 'string' ? input : input.url;
+
+    if (url === 'https://diary.example.com/api/auth/login') {
+      return jsonResponse({
+        success: true,
+        data: {
+          isAuthenticated: true,
+          isAdminAuthenticated: true,
+        },
+      });
+    }
+
+    if (url === 'https://diary.example.com/api/sync') {
+      return jsonResponse({
+        success: false,
+        error: '同步令牌错误',
+      }, 401);
+    }
+
+    throw new Error(`Unexpected fetch URL in test: ${url}`);
+  };
+
+  try {
+    const ApiService = await loadApiServiceClass();
+    const service = new ApiService();
+
+    await assert.rejects(
+      service.bindRemoteAdmin({
+        baseUrl: 'https://diary.example.com/',
+        syncToken: 'invalid-sync-token',
+        adminPassword: 'remote-admin-pass',
+        syncLocalEntries: false,
+      }),
+      /同步令牌错误/
+    );
+
+    const profile = await service.getAdminAccessProfile();
+    assert.equal(profile.remoteBound, false);
+    assert.equal(profile.requiresPassword, true);
+    assert.equal(profile.remoteSyncConfigured, false);
+
+    const session = await service.getSession();
+    assert.equal(session.isAdminAuthenticated, false);
   } finally {
     globalThis.fetch = originalFetch;
   }

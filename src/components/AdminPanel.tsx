@@ -134,6 +134,7 @@ export function AdminPanel({
   const [isSyncingToRemote, setIsSyncingToRemote] = useState(false);
   const [remoteSyncBaseUrl, setRemoteSyncBaseUrl] = useState('');
   const [remoteSyncToken, setRemoteSyncToken] = useState('');
+  const [syncLocalEntriesOnBind, setSyncLocalEntriesOnBind] = useState(false);
   const [isBindingRemote, setIsBindingRemote] = useState(false);
 
   const refreshAdminAccessProfile = async () => {
@@ -174,6 +175,7 @@ export function AdminPanel({
       setShowRemoteBindingForm(false);
       setPasswordInput('');
       setRemoteAdminPassword('');
+      setSyncLocalEntriesOnBind(false);
       setSyncStatus(null);
       return;
     }
@@ -305,11 +307,13 @@ export function AdminPanel({
     }
 
     setRemoteAdminPassword('');
+    setSyncLocalEntriesOnBind(false);
     setShowRemoteBindingForm(true);
   };
 
   const closeRemoteBindingForm = () => {
     setRemoteAdminPassword('');
+    setSyncLocalEntriesOnBind(false);
     setShowRemoteBindingForm(false);
   };
 
@@ -337,14 +341,24 @@ export function AdminPanel({
         baseUrl: remoteSyncBaseUrl,
         syncToken: remoteSyncToken,
         adminPassword: remoteAdminPassword,
+        syncLocalEntries: syncLocalEntriesOnBind,
       });
       syncSessionState(true);
       closeRemoteBindingForm();
       setPasswordInput('');
       await refreshAdminAccessProfile();
       await loadSettings();
+      await onEntriesUpdate();
       await refreshLocalSyncStatus();
-      showOperationFeedback(wasBound ? '远程重新绑定成功，后续请使用最新的远程管理员密码登录本机管理。' : '远程绑定成功，后续请使用远程管理员密码登录本机管理。');
+      showOperationFeedback(
+        syncLocalEntriesOnBind
+          ? (wasBound
+              ? '远程重新绑定成功，本地与远程内容已合并并按时间刷新。后续请使用最新的远程管理员密码登录本机管理。'
+              : '远程绑定成功，本地与远程内容已合并并按时间刷新。后续请使用远程管理员密码登录本机管理。')
+          : (wasBound
+              ? '远程重新绑定成功，本地内容已切换为新远程快照。后续请使用最新的远程管理员密码登录本机管理。'
+              : '远程绑定成功，本地内容已切换为远程快照。后续请使用远程管理员密码登录本机管理。')
+      );
     } catch (error) {
       handleAdminOperationError(error, wasBound ? '重新绑定远程失败' : '绑定远程失败');
     } finally {
@@ -567,6 +581,7 @@ export function AdminPanel({
     remoteSyncBaseUrl,
     remoteSyncToken,
     remoteAdminPassword,
+    syncLocalEntriesOnBind,
     isBindingRemote,
   };
   const authenticatedViewEntries = {
@@ -578,6 +593,7 @@ export function AdminPanel({
     onRemoteSyncBaseUrlChange: setRemoteSyncBaseUrl,
     onRemoteSyncTokenChange: setRemoteSyncToken,
     onRemoteAdminPasswordChange: setRemoteAdminPassword,
+    onSyncLocalEntriesOnBindChange: setSyncLocalEntriesOnBind,
     onShowRemoteBindingForm: () => {
       void openRemoteBindingForm();
     },
@@ -649,6 +665,7 @@ export function AdminPanel({
             remoteSyncBaseUrl={remoteSyncBaseUrl}
             remoteSyncToken={remoteSyncToken}
             remoteAdminPassword={remoteAdminPassword}
+            syncLocalEntriesOnBind={syncLocalEntriesOnBind}
             isBindingRemote={isBindingRemote}
             passwordInput={passwordInput}
             onPasswordInputChange={setPasswordInput}
@@ -663,6 +680,7 @@ export function AdminPanel({
             onRemoteSyncBaseUrlChange={setRemoteSyncBaseUrl}
             onRemoteSyncTokenChange={setRemoteSyncToken}
             onRemoteAdminPasswordChange={setRemoteAdminPassword}
+            onSyncLocalEntriesOnBindChange={setSyncLocalEntriesOnBind}
             onBindRemoteSubmit={() => {
               void handleBindRemote();
             }}

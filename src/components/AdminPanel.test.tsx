@@ -463,6 +463,7 @@ describe('AdminPanel', () => {
 
     await user.click(await screen.findByRole('button', { name: '重新绑定远程' }));
     await user.type(screen.getByPlaceholderText('输入远程管理员密码'), 'remote-admin-pass');
+    await user.click(screen.getByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: '重新绑定并登录' }));
 
     await waitFor(() => {
@@ -470,6 +471,7 @@ describe('AdminPanel', () => {
         baseUrl: 'https://diary.example.com',
         syncToken: 'saved-sync-token',
         adminPassword: 'remote-admin-pass',
+        syncLocalEntries: true,
       });
       expect(onSessionChange).toHaveBeenCalledWith({
         isAuthenticated: true,

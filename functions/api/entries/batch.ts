@@ -115,8 +115,8 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     const importedEntries: DiaryEntry[] = [];
     for (const normalizedEntry of normalizedEntries) {
       const insertedEntry = await context.env.DB.prepare(`
-        INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden, created_at, updated_at, deleted_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL)
         RETURNING *
       `).bind(
         normalizedEntry.entry_uuid,
@@ -211,7 +211,7 @@ export const onRequestPut = async (context: { request: Request; env: Env }): Pro
         }, { status: 400 });
       }
 
-      const existingEntry = await context.env.DB.prepare('SELECT id FROM diary_entries WHERE id = ?').bind(id).first<{ id: number }>();
+      const existingEntry = await context.env.DB.prepare('SELECT id FROM diary_entries WHERE id = ? AND deleted_at IS NULL').bind(id).first<{ id: number }>();
       if (!existingEntry) {
         return jsonResponse<ApiResponse>({
           success: false,

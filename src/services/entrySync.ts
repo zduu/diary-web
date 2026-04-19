@@ -216,3 +216,37 @@ export function markDiaryEntriesSynced(entries: DiaryEntry[], entryUuids: string
 
   return nextEntries;
 }
+
+export function applyIncrementalRemoteEntries(currentEntries: DiaryEntry[], remoteEntries: DiaryEntry[], syncedAt = new Date().toISOString()) {
+  const entryMap = new Map<string, DiaryEntry>();
+
+  for (const entry of currentEntries.map(normalizeDiaryEntry)) {
+    if (!entry.entry_uuid) {
+      continue;
+    }
+
+    entryMap.set(entry.entry_uuid, entry);
+  }
+
+  for (const remoteEntry of remoteEntries.map(normalizeDiaryEntry)) {
+    if (!remoteEntry.entry_uuid) {
+      continue;
+    }
+
+    if (remoteEntry.deleted_at) {
+      entryMap.delete(remoteEntry.entry_uuid);
+      continue;
+    }
+
+    entryMap.set(remoteEntry.entry_uuid, {
+      ...remoteEntry,
+      deleted_at: null,
+      sync_state: syncedState,
+      last_synced_at: syncedAt,
+    });
+  }
+
+  return [...entryMap.values()]
+    .map((entry) => normalizeDiaryEntry(entry))
+    .sort((left, right) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime());
+}

@@ -14,6 +14,7 @@
 2. 已准备好 Cloudflare Secrets：
 `SESSION_SECRET`、`ADMIN_BOOTSTRAP_PASSWORD`、`APP_BOOTSTRAP_PASSWORD`（可选）、`STATS_API_KEY`（可选）。
 3. 已确认 `schema.sql` 是当前生产期望结构。
+4. 如果生产 D1 是旧版本沿用的历史数据库，发布新版前必须先执行 `migrations/2026-04-18-add-entry-uuid.sql`；否则新版 APK 的远程绑定与手动同步对旧云端内容的兼容性无法保证。
 
 ## 1. 生产数据备份（必须）
 
@@ -24,6 +25,12 @@ wrangler d1 export diary-db --remote --output backups/diary-db-$(date +%F-%H%M).
 ```
 
 如果你使用的是别名或不同数据库名，替换命令中的 `diary-db`。
+
+如生产库是旧版本升级而来，在继续之前先执行：
+
+```bash
+wrangler d1 execute diary-db --remote --file migrations/2026-04-18-add-entry-uuid.sql
+```
 
 ## 2. 先部署 Preview/Staging
 

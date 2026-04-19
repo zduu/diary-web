@@ -665,6 +665,7 @@ export function formatEntry(row: Record<string, unknown>): DiaryEntry {
     location: parseStoredLocation(row.location),
     created_at: row.created_at ? String(row.created_at) : undefined,
     updated_at: row.updated_at ? String(row.updated_at) : undefined,
+    deleted_at: row.deleted_at ? String(row.deleted_at) : null,
     tags: parseStoredStringArray(row.tags),
     hidden: Boolean(row.hidden),
   };
