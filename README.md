@@ -2,7 +2,7 @@
 
 基于 React + TypeScript + Cloudflare 构建的现代化日记应用。
 
-# [在线演示](https://diary.edxx.de)
+# [在线演示](https://diary-app-nk7.pages.dev)
 
 ![React](https://img.shields.io/badge/React-18-blue.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue.svg)
