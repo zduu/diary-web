@@ -97,6 +97,7 @@ reports/
 
 # Cloudflare
 .wrangler/
+wrangler.toml
 wrangler.toml.bak
 
 # Database

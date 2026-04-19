@@ -86,6 +86,9 @@ npm start
 npm run start:network
 
 # 本地预览 Cloudflare Functions / D1 行为
+# 如需本地 Wrangler 配置，可先复制模板：
+# cp wrangler.example.toml wrangler.toml
+# 然后按你的 Cloudflare 资源补齐绑定信息
 npm run db:init
 # 如需开发样例数据，再执行：
 # wrangler d1 execute diary-db --local --file=seed.dev.sql
@@ -178,41 +181,33 @@ Android APK 推荐只通过 GitHub Actions 构建，不在本机安装 Android S
    - 构建命令: `npm ci && npm run build`
    - 构建输出目录: `dist`
 
-3. **以 `wrangler.toml` 管理 Cloudflare 绑定**
-   - 本项目的 Pages Functions 绑定通过 `wrangler.toml` 管理，不通过 Dashboard 手动编辑
-   - 修改绑定后，需要重新部署才能生效
-   - 当前建议至少维护以下配置：
-   ```toml
-   [[d1_databases]]
-   binding = "DB"
-   database_name = "diary-db"
-   database_id = "你的-d1-database-id"
-
-   [[r2_buckets]]
-   binding = "IMAGES_BUCKET"
-   bucket_name = "你的-r2-bucket-name"
-   ```
+3. **在 Dashboard 配置绑定与变量**
+   - 仓库默认不提交 `wrangler.toml`，线上 Pages 绑定建议直接在 Cloudflare Dashboard 管理
+   - 至少手动绑定一个 D1 数据库，变量名固定为 `DB`
+   - 如需 R2 图片上传，可额外绑定 R2 bucket，变量名固定为 `IMAGES_BUCKET`
+   - `wrangler.example.toml` 仅作为本地 Wrangler 开发模板，不会自动接管线上配置
 
 4. **配置数据库**
    - 在 Cloudflare Dashboard 中创建 D1 数据库 `diary-db`
-   - 记录数据库 ID，更新本地 `wrangler.toml` 的 `database_id`
+   - 在 Pages 项目的 `Settings > Bindings` 中把该数据库绑定到变量名 `DB`
    - 在 D1 数据库的 "Console" 中执行 `schema.sql` 的内容
    - 如果你的数据库是旧版本升级到当前版本，还需要额外执行 `migrations/2026-04-18-add-entry-uuid.sql`
    - 不要在生产环境执行 `seed.dev.sql`
 
 5. **配置 Secrets**
-   - 运行 `wrangler secret put SESSION_SECRET`
-   - 建议：运行 `wrangler secret put ADMIN_BOOTSTRAP_PASSWORD`
-   - 可选：运行 `wrangler secret put APP_BOOTSTRAP_PASSWORD`
-   - 如需 APK / 本地设备手动同步到线上：运行 `wrangler secret put SYNC_ACCESS_TOKEN`
-   - 可选：运行 `wrangler secret put STATS_API_KEY`
-   - 如需使用旧版 Cloudflare Images 上传：运行 `wrangler secret put IMAGES_API_TOKEN`
+   - 推荐在 Pages 项目的 `Settings > Variables and Secrets` 中直接配置
+   - 也可以用命令行运行 `wrangler secret put SESSION_SECRET`
+   - 建议：配置 `ADMIN_BOOTSTRAP_PASSWORD`
+   - 可选：配置 `APP_BOOTSTRAP_PASSWORD`
+   - 如需 APK / 本地设备手动同步到线上：配置 `SYNC_ACCESS_TOKEN`
+   - 可选：配置 `STATS_API_KEY`
+   - 如需使用旧版 Cloudflare Images 上传：配置 `IMAGES_API_TOKEN`
 
 6. **配置图片上传（可选但推荐）**
-   - 推荐：在 `wrangler.toml` 中配置 R2 bucket 绑定，变量名为 `IMAGES_BUCKET`
+   - 推荐：在 Cloudflare Dashboard 中配置 R2 bucket 绑定，变量名为 `IMAGES_BUCKET`
    - 绑定后系统会自动启用 R2 上传，不需要额外图片 secret
    - 如不使用 R2，仍可回退到 Cloudflare Images
-   - 旧版需要在 `wrangler.toml` / Cloudflare 项目变量中配置 `IMAGES_ACCOUNT_ID`
+   - 旧版需要在 Cloudflare 项目变量中配置 `IMAGES_ACCOUNT_ID`
    - 旧版可选配置 `IMAGES_DELIVERY_URL`（自定义交付域名前缀）
    - 旧版可选配置 `IMAGES_VARIANT`（默认 `public`）
    - 完整说明见 `docs/image-upload-setup.md`
@@ -221,7 +216,7 @@ Android APK 推荐只通过 GitHub Actions 构建，不在本机安装 Android S
    - 统计接口的鉴权与调用方式见 `docs/stats-api.md`
 
 8. **完成部署**
-   - 提交并推送包含 `wrangler.toml` 修改的代码
+   - 提交并推送代码，无需额外提交本地 `wrangler.toml`
    - 等待 Cloudflare Pages 基于当前仓库重新构建部署
    - 如使用命令行部署，可执行 `npm run build` 后再按你的 Pages 发布流程部署 `dist`
 
@@ -345,7 +340,7 @@ A: 确保已部署到 Cloudflare，并检查 `SESSION_SECRET` 是否已配置；
 A: 这是 Cloudflare D1 分布式数据库的一致性问题，已在最新版本中修复
 
 **Q: 如何配置数据库？**
-A: 在 `wrangler.toml` 中配置数据库 ID，在 Cloudflare Pages 中绑定 D1 数据库
+A: 默认推荐在 Cloudflare Pages Dashboard 中手动绑定 D1 到 `DB`；如需本地 Wrangler 开发，再复制 `wrangler.example.toml` 为 `wrangler.toml` 并填入你自己的数据库 ID
 
 **Q: 移动端编辑体验如何？**
 A: 已专门优化移动端编辑界面，提供更大编辑空间和简化的操作流程

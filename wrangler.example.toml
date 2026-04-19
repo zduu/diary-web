@@ -1,0 +1,38 @@
+name = "diary-web"
+
+# 本示例仅用于本地 Wrangler 开发或命令行部署参考。
+# 仓库默认不提交 wrangler.toml，线上 Cloudflare Pages 绑定与变量建议在 Dashboard 手动管理。
+# 如需本地使用，请复制为 wrangler.toml 后再填入你自己的资源 ID：
+# cp wrangler.example.toml wrangler.toml
+# 注意：一旦你带着 wrangler.toml 使用 Wrangler 部署，Cloudflare 会把它视为该项目配置真源。
+
+# Cloudflare Pages 构建产物目录
+pages_build_output_dir = "dist"
+
+# D1 数据库绑定示例
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "你的-d1-数据库名"
+# database_id = "你的-d1-database-id"
+
+# R2 存储桶绑定示例
+# [[r2_buckets]]
+# binding = "IMAGES_BUCKET"
+# bucket_name = "你的-r2-bucket-name"
+
+[vars]
+ENVIRONMENT = "production"
+APP_TIMEZONE = "Asia/Shanghai"
+IMAGES_VARIANT = "public"
+
+# 旧版 Cloudflare Images 方案示例
+# IMAGES_ACCOUNT_ID = "你的-cloudflare-account-id"
+# IMAGES_DELIVERY_URL = "https://imagedelivery.net/你的_hash"
+
+# 建议在 Cloudflare Dashboard Variables / Secrets 中配置生产 secrets：
+# SESSION_SECRET
+# ADMIN_BOOTSTRAP_PASSWORD
+# APP_BOOTSTRAP_PASSWORD
+# SYNC_ACCESS_TOKEN
+# STATS_API_KEY
+# IMAGES_API_TOKEN
