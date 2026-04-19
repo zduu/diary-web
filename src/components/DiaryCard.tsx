@@ -78,7 +78,7 @@ export function DiaryCard({ entry, onEdit, onPreview, searchQuery = '', isHighli
   return (
     <article
       id={entry.id ? `entry-${entry.id}` : undefined}
-      className={`diary-card rounded-[1.6rem] p-5 transition-all duration-500 md:p-6 ${isHighlighted ? 'ring-highlight' : ''}`}
+      className={`diary-card rounded-[1.6rem] p-5 transition-shadow transition-colors duration-300 md:p-6 ${entry.content_type === 'markdown' ? 'rich-content-entry' : ''} ${isHighlighted ? 'ring-highlight' : ''}`}
       style={cardStyle}
       onClick={() => onPreview?.(entry)}
     >

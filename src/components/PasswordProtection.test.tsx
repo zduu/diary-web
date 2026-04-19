@@ -9,6 +9,7 @@ describe('PasswordProtection', () => {
   afterEach(() => {
     cleanup();
     localStorage.clear();
+    document.documentElement.className = '';
     document.body.className = '';
   });
 

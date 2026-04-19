@@ -92,6 +92,7 @@ describe('AdminPanel', () => {
   afterEach(() => {
     cleanup();
     localStorage.clear();
+    document.documentElement.className = '';
     document.body.className = '';
     vi.restoreAllMocks();
   });

@@ -100,7 +100,22 @@ body.display-standalone {
   overflow: hidden;
 }
 
-.theme-light {
+html.theme-light {
+  background:
+    radial-gradient(circle at top left, rgba(29, 78, 216, 0.08), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(194, 65, 12, 0.08), transparent 24%),
+    #f3eee2;
+}
+
+html.theme-dark {
+  background:
+    radial-gradient(circle at top left, rgba(165, 216, 255, 0.14), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(125, 211, 252, 0.12), transparent 22%),
+    linear-gradient(180deg, rgba(9, 14, 22, 0.95), rgba(14, 22, 32, 0.92));
+  background-color: #0a121c;
+}
+
+body.theme-light {
   --color-primary: #1d4ed8;
   --color-secondary: #6b7280;
   --color-background: #f3eee2;
@@ -115,7 +130,7 @@ body.display-standalone {
     #f3eee2;
 }
 
-.theme-dark {
+body.theme-dark {
   --color-primary: #a5d8ff;
   --color-secondary: #cbd5e1;
   --color-background: transparent;
@@ -132,7 +147,7 @@ body.display-standalone {
   overflow-x: hidden;
 }
 
-.theme-dark::before {
+body.theme-dark::before {
   content: '';
   position: fixed;
   inset: 0;
@@ -143,8 +158,8 @@ body.display-standalone {
   z-index: -1;
 }
 
-.theme-light,
-.theme-dark {
+body.theme-light,
+body.theme-dark {
   min-height: 100vh;
 }
 
@@ -162,6 +177,12 @@ body.display-standalone {
   .timeline-entry-shell {
     content-visibility: auto;
     contain-intrinsic-size: 640px;
+  }
+
+  .diary-card.rich-content-entry,
+  .timeline-entry-shell.rich-content-entry {
+    content-visibility: visible;
+    contain-intrinsic-size: auto;
   }
 
   .archive-entry-shell {
@@ -381,7 +402,7 @@ body.display-standalone {
   }
 
   .subtle-grid,
-  .theme-dark::before {
+  body.theme-dark::before {
     display: none;
   }
 

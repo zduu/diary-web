@@ -59,7 +59,10 @@ export function TimelineEntry({
   const weatherText = isMobile ? weatherLabel : `天气 ${weatherLabel}`;
 
   return (
-    <div className="timeline-entry-shell relative" onClick={() => onPreview?.(entry)}>
+    <div
+      className={`timeline-entry-shell relative ${entry.content_type === 'markdown' ? 'rich-content-entry' : ''}`}
+      onClick={() => onPreview?.(entry)}
+    >
       <div
         className={`absolute ${isMobile ? 'left-3.5 h-4 w-4' : 'left-6 h-6 w-6'} top-0 z-10 rounded-full border-2 shadow-lg`}
         style={{
@@ -73,7 +76,7 @@ export function TimelineEntry({
 
       <div
         id={entry.id ? `entry-${entry.id}` : undefined}
-        className={`${isMobile ? 'ml-10' : 'ml-16'} relative transition-all duration-500 ${isMobile ? 'pb-8' : 'pb-12'} ${isHighlighted ? 'ring-highlight rounded-[1.4rem] px-4 pt-3' : ''}`}
+        className={`${isMobile ? 'ml-10' : 'ml-16'} relative transition-shadow transition-colors duration-300 ${isMobile ? 'pb-8' : 'pb-12'} ${isHighlighted ? 'ring-highlight rounded-[1.4rem] px-4 pt-3' : ''}`}
         style={{
           backgroundColor: isHighlighted
             ? theme.mode === 'dark'

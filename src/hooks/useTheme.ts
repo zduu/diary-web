@@ -79,27 +79,34 @@ export function useTheme() {
 
   const theme = themes[currentTheme];
 
-  const setTheme = (mode: ThemeMode) => {
-    setCurrentTheme(mode);
-    localStorage.setItem('diary-theme', mode);
-    
-    // 更新 CSS 变量
+  const applyTheme = (mode: ThemeMode) => {
     const root = document.documentElement;
     const themeConfig = themes[mode];
-    
+
     Object.entries(themeConfig.colors).forEach(([key, value]) => {
       root.style.setProperty(`--color-${key}`, value);
     });
 
-    // 更新 body 类名
-    document.body.className = `theme-${mode}`;
+    root.classList.remove('theme-light', 'theme-dark');
+    document.body.classList.remove('theme-light', 'theme-dark');
+
+    const themeClass = `theme-${mode}`;
+    root.classList.add(themeClass);
+    document.body.classList.add(themeClass);
+    root.style.colorScheme = mode;
 
     const themeColor = mode === 'dark' ? '#0a121c' : '#f3eee2';
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor);
   };
 
+  const setTheme = (mode: ThemeMode) => {
+    setCurrentTheme(mode);
+    localStorage.setItem('diary-theme', mode);
+    applyTheme(mode);
+  };
+
   useEffect(() => {
-    setTheme(currentTheme);
+    applyTheme(currentTheme);
   }, [currentTheme]);
 
   const toggleTheme = () => {
