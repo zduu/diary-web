@@ -12,6 +12,7 @@ import { MockApiService } from './mockApiService.ts';
 import { PublicSettingsStore } from './publicSettingsStore.ts';
 import { ApiRequestError, RemoteApiClient } from './remoteApiClient.ts';
 import { withRetry, verifyDeletion, getConsistencyErrorMessage } from '../utils/d1Utils.ts';
+import { prepareImageForUpload } from '../utils/imageUploadCompression.ts';
 import { debugWarn } from '../utils/logger.ts';
 
 function getViteEnvValue(key: 'MODE' | 'VITE_USE_MOCK_API' | 'VITE_ENABLE_DATA_MODE_SWITCH'): string | undefined {
@@ -324,9 +325,11 @@ export class ApiService {
   }
 
   async uploadImageWithStatus(file: File): Promise<ImageUploadResult> {
+    const preparedFile = await prepareImageForUpload(file);
+
     return this.runWithCurrentMode({
       mock: async () => {
-        const url = await this.mockService.uploadImage(file);
+        const url = await this.mockService.uploadImage(preparedFile);
         return {
           url,
           storage: inferUploadStorage(url),
@@ -335,7 +338,7 @@ export class ApiService {
       remote: async () => {
         try {
           const formData = new FormData();
-          formData.set('file', file, file.name);
+          formData.set('file', preparedFile, preparedFile.name);
 
           const payload = await this.requestRemoteData<{ url: string }>('/uploads/image', '图片上传失败', {
             method: 'POST',
@@ -352,12 +355,12 @@ export class ApiService {
           };
         } catch (multipartError) {
           try {
-            const dataUrl = await convertFileToDataUrl(file);
+            const dataUrl = await convertFileToDataUrl(preparedFile);
             const payload = await this.requestRemoteData<{ url: string }>('/uploads/image', '图片上传失败', {
               method: 'POST',
               body: JSON.stringify({
                 dataUrl,
-                filename: file.name,
+                filename: preparedFile.name,
               }),
             });
 
@@ -372,7 +375,7 @@ export class ApiService {
             };
           } catch (jsonFallbackError) {
             debugWarn('远程图片上传失败，回退为内嵌 base64 图片:', jsonFallbackError);
-            const fallbackUrl = await convertFileToDataUrl(file);
+            const fallbackUrl = await convertFileToDataUrl(preparedFile);
             const warningMessage = jsonFallbackError instanceof Error
               ? jsonFallbackError.message
               : multipartError instanceof Error

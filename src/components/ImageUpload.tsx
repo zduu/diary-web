@@ -151,7 +151,7 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
               拖拽图片到这里，或点击选择文件
             </p>
             <p className={`${isMobile ? 'text-xs' : 'text-sm'} mt-1`} style={{ color: theme.colors.textSecondary }}>
-              支持 JPG、PNG、GIF 格式，单个文件不超过 5MB
+              支持 JPG、PNG、GIF 格式，单个文件不超过 5MB，上传时会自动压缩
             </p>
             <p className="text-xs mt-1" style={{ color: theme.colors.textSecondary }}>
               已上传 {images.length}/{maxImages} 张
