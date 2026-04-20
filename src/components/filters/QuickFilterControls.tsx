@@ -31,41 +31,44 @@ interface ActiveFilterChipProps {
 
 function getTriggerStyle(theme: ThemeConfig): CSSProperties {
   return {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.56)' : theme.colors.surface,
+    backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
     borderColor: theme.colors.border,
     color: theme.colors.text,
     textShadow: 'none',
-    backdropFilter: theme.mode === 'dark' ? 'blur(12px)' : 'none',
     '--tw-ring-color': theme.colors.primary,
   } as CSSProperties;
 }
 
 function getMenuStyle(theme: ThemeConfig): CSSProperties {
   return {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.82)' : theme.colors.surface,
+    backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
     borderColor: theme.colors.border,
-    backdropFilter: theme.mode === 'dark' ? 'blur(20px)' : 'none',
-    boxShadow: theme.mode === 'dark' ? '0 18px 40px rgba(4, 10, 18, 0.22)' : '0 14px 32px rgba(15, 23, 42, 0.08)',
+    boxShadow:
+      theme.mode === 'dark'
+        ? '0 4px 12px rgba(0, 0, 0, 0.4)'
+        : '0 4px 12px rgba(0, 0, 0, 0.05)',
   };
 }
 
 function getOptionStyle(theme: ThemeConfig, selected: boolean): CSSProperties {
   return {
     backgroundColor: selected
-      ? (theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.18)' : `${theme.colors.primary}20`)
+      ? (theme.mode === 'dark' ? '#374151' : '#eff6ff')
       : 'transparent',
-    color: theme.colors.text,
+    color: selected
+      ? (theme.mode === 'dark' ? '#f9fafb' : '#3b82f6')
+      : theme.colors.text,
     textShadow: 'none',
   };
 }
 
 function getChipStyle(theme: ThemeConfig): CSSProperties {
+  const isDark = theme.mode === 'dark';
   return {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.16)' : `${theme.colors.primary}16`,
-    color: theme.mode === 'dark' ? theme.colors.text : theme.colors.primary,
-    border: `1px solid ${theme.mode === 'dark' ? theme.colors.border : `${theme.colors.primary}30`}`,
+    backgroundColor: isDark ? '#374151' : '#eff6ff',
+    color: isDark ? '#f9fafb' : '#3b82f6',
+    border: `1px solid ${isDark ? '#4b5563' : '#bfdbfe'}`,
     textShadow: 'none',
-    backdropFilter: theme.mode === 'dark' ? 'blur(10px)' : 'none',
   };
 }
 

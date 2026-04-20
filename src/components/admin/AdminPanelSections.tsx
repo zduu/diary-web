@@ -238,8 +238,12 @@ function BindingStateBadge({
     <span
       className="inline-flex rounded-full px-2.5 py-1 text-xs font-medium"
       style={{
-        backgroundColor: remoteBound ? 'rgba(34, 197, 94, 0.14)' : 'rgba(148, 163, 184, 0.14)',
-        color: remoteBound ? '#16a34a' : theme.colors.textSecondary,
+        backgroundColor: remoteBound 
+          ? (theme.mode === 'dark' ? '#064e3b' : 'rgba(34, 197, 94, 0.14)')
+          : (theme.mode === 'dark' ? '#374151' : 'rgba(148, 163, 184, 0.14)'),
+        color: remoteBound 
+          ? (theme.mode === 'dark' ? '#6ee7b7' : '#16a34a')
+          : theme.colors.textSecondary,
       }}
     >
       {remoteBound ? '已绑定远程' : '未绑定远程'}
@@ -286,7 +290,7 @@ function RemoteBindingForm({
           placeholder="https://你的-pages-域名.pages.dev"
           className="w-full rounded-lg border px-3 py-2"
           style={{
-            backgroundColor: theme.colors.surface,
+            backgroundColor: theme.mode === 'dark' ? '#111827' : theme.colors.surface,
             borderColor: theme.colors.border,
             color: theme.colors.text,
           }}
@@ -298,7 +302,7 @@ function RemoteBindingForm({
           placeholder="输入线上同步令牌"
           className="w-full rounded-lg border px-3 py-2"
           style={{
-            backgroundColor: theme.colors.surface,
+            backgroundColor: theme.mode === 'dark' ? '#111827' : theme.colors.surface,
             borderColor: theme.colors.border,
             color: theme.colors.text,
           }}
@@ -310,7 +314,7 @@ function RemoteBindingForm({
           placeholder="输入远程管理员密码"
           className="w-full rounded-lg border px-3 py-2"
           style={{
-            backgroundColor: theme.colors.surface,
+            backgroundColor: theme.mode === 'dark' ? '#111827' : theme.colors.surface,
             borderColor: theme.colors.border,
             color: theme.colors.text,
           }}
@@ -318,7 +322,7 @@ function RemoteBindingForm({
         <label
           className="flex items-start gap-3 rounded-lg border px-3 py-3 text-sm"
           style={{
-            backgroundColor: theme.colors.surface,
+            backgroundColor: theme.mode === 'dark' ? '#111827' : theme.colors.surface,
             borderColor: theme.colors.border,
             color: theme.colors.text,
           }}

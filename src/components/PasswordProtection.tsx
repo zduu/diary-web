@@ -82,16 +82,16 @@ export function PasswordProtection({ onAuthenticated, passwordSettings }: Passwo
   }
 
   const shellStyle = {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.68)' : theme.colors.surface,
+    backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
     border: `1px solid ${theme.colors.border}`,
     boxShadow:
       theme.mode === 'dark'
-        ? '0 30px 70px rgba(4, 10, 18, 0.34)'
-        : '0 22px 54px rgba(15, 23, 42, 0.12)',
+        ? '0 4px 12px rgba(0, 0, 0, 0.4)'
+        : '0 4px 12px rgba(0, 0, 0, 0.1)',
   };
 
   const fieldStyle = {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.72)',
+    backgroundColor: theme.mode === 'dark' ? '#111827' : '#f9fafb',
     border: `1px solid ${theme.colors.border}`,
     color: theme.colors.text,
   };
@@ -102,10 +102,9 @@ export function PasswordProtection({ onAuthenticated, passwordSettings }: Passwo
       zIndex={9999}
       closeOnBackdropClick={false}
       backdropStyle={{
-        backgroundColor: 'transparent',
-        backdropFilter: 'blur(4px) brightness(0.82)'
+        backgroundColor: 'rgba(0, 0, 0, 0.45)',
       }}
-      panelClassName={`relative z-10 mx-4 w-full max-w-xl rounded-[2rem] p-6 sm:mx-6 sm:p-8 md:mx-8 md:p-10 ${theme.effects.blur}`}
+      panelClassName={`relative z-10 mx-4 w-full max-w-xl rounded-[2rem] p-6 sm:mx-6 sm:p-8 md:mx-8 md:p-10`}
       panelStyle={shellStyle}
     >
       <div className="relative z-10">
@@ -113,7 +112,7 @@ export function PasswordProtection({ onAuthenticated, passwordSettings }: Passwo
           <div
             className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs uppercase tracking-[0.18em]"
             style={{
-              backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.56)',
+              backgroundColor: theme.mode === 'dark' ? '#374151' : '#f3f4f6',
               border: `1px solid ${theme.colors.border}`,
               color: theme.colors.primary,
             }}
@@ -125,8 +124,9 @@ export function PasswordProtection({ onAuthenticated, passwordSettings }: Passwo
           <div
             className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl sm:h-18 sm:w-18 md:h-20 md:w-20"
             style={{
-              background: `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.accent})`,
+              backgroundColor: theme.colors.primary,
               color: '#ffffff',
+              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.25)',
             }}
           >
             <Lock className="h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10" />
@@ -191,9 +191,9 @@ export function PasswordProtection({ onAuthenticated, passwordSettings }: Passwo
             disabled={isLoading || !password.trim()}
             className="primary-button w-full rounded-2xl py-3 text-base font-medium transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 sm:py-4 sm:text-lg"
             style={{
-              background: `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.accent})`,
+              backgroundColor: theme.colors.primary,
               color: 'white',
-              boxShadow: '0 16px 36px rgba(37, 99, 235, 0.2)',
+              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.25)',
             }}
           >
             {isLoading ? '验证中...' : '进入应用'}

@@ -28,6 +28,25 @@ export function AppHeader({
   const { theme } = useThemeContext();
   const isMobile = useIsMobile();
   const shellSurfaceStyle = getShellSurfaceStyle(theme);
+  const headerSurfaceStyle = {
+    ...shellSurfaceStyle,
+    backgroundColor:
+      theme.mode === 'dark'
+        ? 'rgba(10, 18, 28, 0.34)'
+        : theme.mode === 'paper'
+          ? 'rgba(255, 253, 247, 0.52)'
+          : 'rgba(255, 255, 255, 0.52)',
+    border:
+      theme.mode === 'dark'
+        ? '1px solid rgba(148, 163, 184, 0.18)'
+        : theme.mode === 'paper'
+          ? '1px solid rgba(217, 207, 191, 0.42)'
+          : '1px solid rgba(229, 231, 235, 0.4)',
+    boxShadow:
+      theme.mode === 'dark'
+        ? '0 12px 28px rgba(4, 10, 18, 0.16)'
+        : '0 10px 24px rgba(15, 23, 42, 0.06)',
+  };
   const quietButtonStyle = getQuietButtonStyle(theme);
   const primaryButtonStyle = getPrimaryButtonStyle(theme);
   const controlButtons = (
@@ -73,8 +92,8 @@ export function AppHeader({
         style={{ paddingTop: isMobile ? 'max(0.5rem, var(--safe-area-top))' : undefined }}
       >
         <div
-          className={`app-header ${isMobile ? 'rounded-[1.3rem] px-3 py-2' : 'rounded-[1.9rem] px-4 py-3 md:px-5 md:py-4'} ${theme.effects.blur}`}
-          style={shellSurfaceStyle}
+          className={`app-header app-header--clear ${isMobile ? 'rounded-[1.3rem] px-3 py-2' : 'rounded-[1.9rem] px-4 py-3 md:px-5 md:py-4'}`}
+          style={headerSurfaceStyle}
         >
           <div className={`flex ${isMobile ? 'flex-col gap-2' : 'flex-col gap-4 md:flex-row md:items-center md:justify-between'}`}>
             <div className={`flex items-center ${isMobile ? 'justify-between gap-3' : 'gap-2 md:gap-4'}`}>

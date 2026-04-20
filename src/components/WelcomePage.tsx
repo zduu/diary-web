@@ -90,11 +90,11 @@ export function WelcomePage({
       className={`welcome-page ${isBackground || isTransitioningToApp ? 'pointer-events-none' : ''}`}
       style={{
         minHeight: '100vh',
-        backgroundColor: theme.mode === 'dark' ? 'transparent' : theme.colors.background,
+        backgroundColor: theme.colors.background,
         opacity,
         transform,
         filter,
-        transition: 'all 0.8s cubic-bezier(0.22, 1, 0.36, 1)',
+        transition: 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
       }}
     >
       {!isMobile && <div className="subtle-grid" />}
@@ -104,8 +104,8 @@ export function WelcomePage({
         style={{
           background:
             theme.mode === 'dark'
-              ? 'radial-gradient(circle at top left, rgba(148, 197, 253, 0.18), transparent 34%), radial-gradient(circle at bottom right, rgba(110, 231, 183, 0.14), transparent 28%)'
-              : 'radial-gradient(circle at top left, rgba(37, 99, 235, 0.1), transparent 30%), radial-gradient(circle at bottom right, rgba(217, 119, 6, 0.1), transparent 26%)',
+              ? 'radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 34%), radial-gradient(circle at bottom right, rgba(99, 102, 241, 0.06), transparent 28%)'
+              : 'radial-gradient(circle at top left, rgba(59, 130, 246, 0.05), transparent 30%), radial-gradient(circle at bottom right, rgba(245, 158, 11, 0.05), transparent 26%)',
         }}
       />
 
@@ -121,8 +121,9 @@ export function WelcomePage({
             <div
               className="flex h-11 w-11 items-center justify-center rounded-2xl"
               style={{
-                background: `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.accent})`,
+                backgroundColor: theme.colors.primary,
                 color: '#fff',
+                boxShadow: '0 4px 12px rgba(59, 130, 246, 0.25)',
               }}
             >
               <BookOpen className="h-5 w-5" />
@@ -231,8 +232,8 @@ export function WelcomePage({
                       <div
                         className="flex h-10 w-10 items-center justify-center rounded-2xl"
                         style={{
-                          backgroundColor: theme.mode === 'dark' ? 'rgba(147, 197, 253, 0.14)' : `${theme.colors.primary}12`,
-                          color: theme.colors.primary,
+                          backgroundColor: theme.mode === 'dark' ? '#374151' : '#eff6ff',
+                          color: theme.mode === 'dark' ? '#f9fafb' : '#3b82f6',
                         }}
                       >
                         <feature.icon className="h-5 w-5" />

@@ -442,11 +442,11 @@ function AppContent() {
           isTransitioningToApp ? 'main-app-enter' : ''
         }`}
         style={{
-          backgroundColor: theme.mode === 'dark' ? 'transparent' : theme.colors.background,
-          transform: showMainApp ? 'scale(1)' : 'scale(0.95)',
-          filter: showMainApp ? 'blur(0px) brightness(1)' : 'blur(3px) brightness(0.8)',
+          backgroundColor: theme.colors.background,
+          transform: showMainApp ? 'scale(1)' : 'scale(0.98)',
+          filter: showMainApp ? 'none' : 'blur(4px)',
           transition: isTransitioningToApp
-            ? 'all 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+            ? 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)'
             : 'all 0.3s ease',
           display: showMainApp ? 'block' : 'none',
           minHeight: '100vh',

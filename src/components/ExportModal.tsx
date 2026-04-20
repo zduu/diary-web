@@ -122,7 +122,7 @@ export function ExportModal({ isOpen, onClose, entries, exportType }: ExportModa
       initialFocusRef={exportButtonRef}
       zIndex={50}
       backdropStyle={{
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.45)',
         overflow: 'hidden',
       }}
       panelClassName="w-full max-w-md rounded-xl shadow-2xl"

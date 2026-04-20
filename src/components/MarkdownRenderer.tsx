@@ -138,7 +138,7 @@ function MarkdownCodeBlock({ children, className, theme, blockStyle }: MarkdownC
             padding: '0.32rem 0.7rem',
             borderRadius: '999px',
             border: `1px solid ${theme.colors.border}`,
-            backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.12)' : 'rgba(255, 255, 255, 0.7)',
+            backgroundColor: theme.mode === 'dark' ? '#374151' : '#f3f4f6',
             color: copyState === 'error' ? '#dc2626' : theme.colors.textSecondary,
             fontSize: '0.75rem',
             lineHeight: 1.2,
@@ -250,7 +250,7 @@ function MarkdownImage({ theme, src, alt = '', ...props }: MarkdownImageProps) {
         borderRadius: '18px',
         overflow: 'hidden',
         border: `1px solid ${theme.colors.border}`,
-        backgroundColor: theme.mode === 'dark' ? 'rgba(15, 23, 42, 0.45)' : 'rgba(255, 255, 255, 0.7)',
+        backgroundColor: theme.mode === 'dark' ? '#1f2937' : '#f9fafb',
         aspectRatio: imageRatio,
         minHeight: imageRatio ? undefined : '180px',
       }}
@@ -295,7 +295,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
   };
 
   const mutedBlockStyle: CSSProperties = {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.12)' : theme.colors.surface,
+    backgroundColor: theme.mode === 'dark' ? '#111827' : theme.colors.surface,
     border: `1px solid ${theme.colors.border}`,
     borderRadius: '18px',
   };

@@ -61,14 +61,14 @@ export function DiaryCard({ entry, onEdit, onPreview, searchQuery = '', isHighli
   const visibleImages = compactMode ? entry.images?.slice(0, 2) : entry.images;
 
   const cardStyle: CSSProperties = {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.62)' : theme.colors.surface,
+    backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
     border: `1px solid ${isHighlighted ? theme.colors.primary : theme.colors.border}`,
     boxShadow:
       isHighlighted
-        ? `0 0 0 3px ${theme.colors.primary}20, 0 18px 40px rgba(15, 23, 42, 0.12)`
+        ? `0 0 0 2px ${theme.colors.primary}20, 0 4px 12px rgba(0, 0, 0, 0.1)`
         : theme.mode === 'dark'
-          ? '0 24px 50px rgba(4, 10, 18, 0.28)'
-          : '0 18px 40px rgba(15, 23, 42, 0.08)',
+          ? '0 4px 12px rgba(0, 0, 0, 0.3)'
+          : '0 4px 12px rgba(0, 0, 0, 0.05)',
   };
   const handleImageClick = (index: number) => {
     setSelectedImageIndex(index);
@@ -132,7 +132,7 @@ export function DiaryCard({ entry, onEdit, onPreview, searchQuery = '', isHighli
             }}
             className="quiet-button rounded-xl p-2.5 transition-transform duration-200 hover:-translate-y-0.5"
             style={{
-              backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.12)' : 'rgba(255, 255, 255, 0.72)',
+              backgroundColor: theme.mode === 'dark' ? '#374151' : '#f3f4f6',
               border: `1px solid ${theme.colors.border}`,
               color: theme.colors.textSecondary,
             }}

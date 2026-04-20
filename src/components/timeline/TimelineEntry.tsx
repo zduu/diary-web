@@ -64,13 +64,13 @@ export function TimelineEntry({
       onClick={() => onPreview?.(entry)}
     >
       <div
-        className={`absolute ${isMobile ? 'left-3.5 h-4 w-4' : 'left-6 h-6 w-6'} top-0 z-10 rounded-full border-2 shadow-lg`}
+        className={`absolute ${isMobile ? 'left-3.5 h-4 w-4' : 'left-6 h-6 w-6'} top-0 z-10 rounded-full border-2`}
         style={{
-          backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.9)' : theme.colors.surface,
+          backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
           borderColor: theme.mode === 'dark' ? theme.colors.accent : theme.colors.primary,
           boxShadow: theme.mode === 'dark'
-            ? '0 4px 8px rgba(125, 211, 252, 0.24)'
-            : `0 4px 8px ${theme.colors.primary}40`,
+            ? '0 2px 8px rgba(0, 0, 0, 0.4)'
+            : `0 2px 8px ${theme.colors.primary}25`,
         }}
       />
 
@@ -80,11 +80,11 @@ export function TimelineEntry({
         style={{
           backgroundColor: isHighlighted
             ? theme.mode === 'dark'
-              ? 'rgba(148, 163, 184, 0.08)'
+              ? 'rgba(55, 65, 81, 0.3)'
               : `${theme.colors.primary}08`
             : 'transparent',
           borderBottom: index < totalEntries - 1
-            ? `1px solid ${theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : theme.colors.border}20`
+            ? `1px solid ${theme.mode === 'dark' ? '#374151' : theme.colors.border}40`
             : 'none',
           boxShadow: isHighlighted ? `0 0 0 2px ${theme.colors.primary}20` : 'none',
         }}

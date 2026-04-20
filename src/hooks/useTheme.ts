@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export type ThemeMode = 'light' | 'dark';
+export type ThemeMode = 'light' | 'paper' | 'dark';
 
 export interface ThemeConfig {
   mode: ThemeMode;
@@ -25,6 +25,24 @@ const themes: Record<ThemeMode, ThemeConfig> = {
   light: {
     mode: 'light',
     colors: {
+      primary: '#3b82f6',
+      secondary: '#64748b',
+      background: '#f9fafb',
+      surface: '#ffffff',
+      text: '#111827',
+      textSecondary: '#64748b',
+      border: '#e5e7eb',
+      accent: '#6366f1',
+    },
+    effects: {
+      blur: 'backdrop-blur-sm',
+      shadow: 'shadow-md',
+      gradient: 'bg-white',
+    },
+  },
+  paper: {
+    mode: 'paper',
+    colors: {
       primary: '#1d4ed8',
       secondary: '#6b7280',
       background: '#f3eee2',
@@ -36,33 +54,36 @@ const themes: Record<ThemeMode, ThemeConfig> = {
     },
     effects: {
       blur: 'backdrop-blur-sm',
-      shadow: 'shadow-xl',
+      shadow: 'shadow-lg',
       gradient: 'bg-gradient-to-br from-stone-50 to-amber-50',
     },
   },
   dark: {
     mode: 'dark',
     colors: {
-      primary: '#a5d8ff',
-      secondary: '#cbd5e1',
-      background: 'transparent',
-      surface: 'rgba(10, 18, 28, 0.72)',
-      text: '#f8fbff',
-      textSecondary: 'rgba(226, 232, 240, 0.84)',
-      border: 'rgba(148, 163, 184, 0.24)',
-      accent: '#7dd3fc',
+      primary: '#60a5fa',
+      secondary: '#94a3b8',
+      background: '#111827',
+      surface: '#1f2937',
+      text: '#f9fafb',
+      textSecondary: '#94a3b8',
+      border: '#374151',
+      accent: '#818cf8',
     },
     effects: {
-      blur: 'backdrop-blur-2xl',
-      shadow: 'glass-shadow',
-      gradient: 'glass-gradient',
+      blur: 'backdrop-blur-xl',
+      shadow: 'shadow-xl',
+      gradient: 'bg-gray-800',
     },
   },
 };
 
 function normalizeThemeMode(savedValue: string | null): ThemeMode {
-  if (savedValue === 'dark' || savedValue === 'glass') {
+  if (savedValue === 'dark') {
     return 'dark';
+  }
+  if (savedValue === 'paper') {
+    return 'paper';
   }
 
   return 'light';
@@ -87,15 +108,15 @@ export function useTheme() {
       root.style.setProperty(`--color-${key}`, value);
     });
 
-    root.classList.remove('theme-light', 'theme-dark');
-    document.body.classList.remove('theme-light', 'theme-dark');
+    root.classList.remove('theme-light', 'theme-paper', 'theme-dark');
+    document.body.classList.remove('theme-light', 'theme-paper', 'theme-dark');
 
     const themeClass = `theme-${mode}`;
     root.classList.add(themeClass);
     document.body.classList.add(themeClass);
-    root.style.colorScheme = mode;
+    root.style.colorScheme = mode === 'dark' ? 'dark' : 'light';
 
-    const themeColor = mode === 'dark' ? '#0a121c' : '#f3eee2';
+    const themeColor = mode === 'dark' ? '#111827' : mode === 'paper' ? '#f3eee2' : '#f9fafb';
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor);
   };
 
@@ -110,7 +131,7 @@ export function useTheme() {
   }, [currentTheme]);
 
   const toggleTheme = () => {
-    const modes: ThemeMode[] = ['light', 'dark'];
+    const modes: ThemeMode[] = ['light', 'paper', 'dark'];
     const currentIndex = modes.indexOf(currentTheme);
     const nextIndex = (currentIndex + 1) % modes.length;
     setTheme(modes[nextIndex]);

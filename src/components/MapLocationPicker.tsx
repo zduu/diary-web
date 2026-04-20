@@ -781,7 +781,7 @@ export function MapLocationPicker({
       zIndex={50}
       padding={isMobile ? '8px' : '16px'}
       backdropStyle={{
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.45)',
         overflow: 'hidden',
       }}
       panelClassName={`w-full flex flex-col rounded-lg bg-white shadow-xl ${

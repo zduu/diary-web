@@ -8,7 +8,7 @@ export function isUnauthorizedAdminPanelError(error: unknown) {
 
 export function getAdminTextColor(theme: ThemeConfig, type: 'primary' | 'secondary' = 'primary') {
   if (theme.mode === 'dark') {
-    return type === 'primary' ? '#f1f5f9' : 'rgba(241, 245, 249, 0.8)';
+    return type === 'primary' ? '#f9fafb' : '#94a3b8';
   }
 
   return type === 'primary' ? theme.colors.text : theme.colors.textSecondary;
@@ -16,12 +16,11 @@ export function getAdminTextColor(theme: ThemeConfig, type: 'primary' | 'seconda
 
 export function buildAdminPanelStyle(theme: ThemeConfig): CSSProperties {
   return {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(15, 23, 42, 0.95)' : theme.colors.surface,
-    border: theme.mode === 'dark' ? '1px solid rgba(99, 102, 241, 0.3)' : `1px solid ${theme.colors.border}`,
-    backdropFilter: theme.mode === 'dark' ? 'blur(20px)' : 'none',
+    backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
+    border: `1px solid ${theme.colors.border}`,
     boxShadow: theme.mode === 'dark'
-      ? '0 8px 32px rgba(0, 0, 0, 0.3), 0 0 20px rgba(99, 102, 241, 0.2)'
-      : '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-    color: theme.mode === 'dark' ? '#f1f5f9' : theme.colors.text,
+      ? '0 4px 12px rgba(0, 0, 0, 0.4)'
+      : '0 4px 12px rgba(0, 0, 0, 0.05)',
+    color: theme.mode === 'dark' ? '#f9fafb' : theme.colors.text,
   };
 }

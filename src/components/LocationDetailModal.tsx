@@ -21,16 +21,16 @@ export function LocationDetailModal({
   }
 
   const panelStyle = {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.78)' : theme.colors.surface,
+    backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
     border: `1px solid ${theme.colors.border}`,
     boxShadow:
       theme.mode === 'dark'
-        ? '0 24px 60px rgba(7, 12, 20, 0.35)'
-        : '0 20px 48px rgba(15, 23, 42, 0.14)',
+        ? '0 4px 12px rgba(0, 0, 0, 0.4)'
+        : '0 4px 12px rgba(0, 0, 0, 0.1)',
   };
 
   const fieldStyle = {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.62)',
+    backgroundColor: theme.mode === 'dark' ? '#111827' : '#f9fafb',
     border: `1px solid ${theme.colors.border}`,
     color: theme.colors.text,
   };

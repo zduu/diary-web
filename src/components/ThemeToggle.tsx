@@ -1,20 +1,32 @@
 import { useThemeContext } from './ThemeProvider';
 
 const themeNames = {
-  light: '纸页',
+  light: '日读',
+  paper: '纸页',
   dark: '夜读',
+};
+
+const themeAccents = {
+  light: '#3b82f6',
+  paper: '#f59e0b',
+  dark: '#60a5fa',
 };
 
 export function ThemeToggle() {
   const { currentTheme, toggleTheme } = useThemeContext();
-  const nextThemeName = currentTheme === 'light' ? themeNames.dark : themeNames.light;
-  const themeAccent = currentTheme === 'light' ? '#f59e0b' : '#38bdf8';
+  const nextThemeMode = (() => {
+    if (currentTheme === 'light') return 'paper';
+    if (currentTheme === 'paper') return 'dark';
+    return 'light';
+  })();
+  const nextThemeName = themeNames[nextThemeMode];
+  const themeAccent = themeAccents[currentTheme];
 
   return (
     <button
       onClick={toggleTheme}
       aria-label={`当前主题 ${themeNames[currentTheme]}，点击切换到 ${nextThemeName}`}
-      aria-description="主题切换按钮，会在纸页和夜读之间切换。"
+      aria-description="主题切换按钮，会在日读、纸页和夜读之间循环切换。"
       className="group relative flex items-center gap-1.5 rounded-xl px-2.5 py-2 transition-transform duration-200 hover:-translate-y-0.5 md:gap-2 md:rounded-2xl md:px-3"
       style={{
         backgroundColor: 'var(--color-surface)',

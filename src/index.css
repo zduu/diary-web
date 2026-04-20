@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  font-family: 'Iowan Old Style', 'Palatino Linotype', 'Noto Serif SC', 'Songti SC', Georgia, serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   line-height: 1.6;
   font-weight: 400;
   color-scheme: light dark;
@@ -12,14 +12,14 @@
   --safe-area-right: env(safe-area-inset-right, 0px);
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
-  --color-primary: #1d4ed8;
-  --color-secondary: #6b7280;
-  --color-background: #f3eee2;
-  --color-surface: #fffdf7;
-  --color-text: #1f2937;
-  --color-textSecondary: #6b7280;
-  --color-border: #d9cfbf;
-  --color-accent: #c2410c;
+  --color-primary: #3b82f6;
+  --color-secondary: #64748b;
+  --color-background: #f9fafb;
+  --color-surface: #ffffff;
+  --color-text: #111827;
+  --color-textSecondary: #64748b;
+  --color-border: #e5e7eb;
+  --color-accent: #6366f1;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -43,9 +43,7 @@ body {
   color: var(--color-text);
   transition: background-color 0.28s ease, color 0.28s ease;
   overscroll-behavior-y: none;
-  background:
-    radial-gradient(circle at top left, rgba(29, 78, 216, 0.08), transparent 28%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 40%);
+  background: var(--color-background);
 }
 
 #root {
@@ -68,7 +66,7 @@ body {
   padding: 0.7rem 1rem;
   background: var(--color-surface);
   color: var(--color-text);
-  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   transition: transform 0.2s ease;
 }
 
@@ -101,21 +99,30 @@ body.display-standalone {
 }
 
 html.theme-light {
-  background:
-    radial-gradient(circle at top left, rgba(29, 78, 216, 0.08), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(194, 65, 12, 0.08), transparent 24%),
-    #f3eee2;
+  background: var(--color-background);
+}
+
+html.theme-paper {
+  background: var(--color-background);
 }
 
 html.theme-dark {
-  background:
-    radial-gradient(circle at top left, rgba(165, 216, 255, 0.14), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(125, 211, 252, 0.12), transparent 22%),
-    linear-gradient(180deg, rgba(9, 14, 22, 0.95), rgba(14, 22, 32, 0.92));
-  background-color: #0a121c;
+  background: #111827;
 }
 
 body.theme-light {
+  --color-primary: #3b82f6;
+  --color-secondary: #64748b;
+  --color-background: #f9fafb;
+  --color-surface: #ffffff;
+  --color-text: #111827;
+  --color-textSecondary: #64748b;
+  --color-border: #e5e7eb;
+  --color-accent: #6366f1;
+  background: var(--color-background);
+}
+
+body.theme-paper {
   --color-primary: #1d4ed8;
   --color-secondary: #6b7280;
   --color-background: #f3eee2;
@@ -124,38 +131,29 @@ body.theme-light {
   --color-textSecondary: #6b7280;
   --color-border: #d9cfbf;
   --color-accent: #c2410c;
-  background:
-    radial-gradient(circle at top left, rgba(29, 78, 216, 0.08), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(194, 65, 12, 0.08), transparent 24%),
-    #f3eee2;
+  background: var(--color-background);
+}
+
+body.theme-paper .primary-button {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
 }
 
 body.theme-dark {
-  --color-primary: #a5d8ff;
-  --color-secondary: #cbd5e1;
-  --color-background: transparent;
-  --color-surface: rgba(10, 18, 28, 0.72);
-  --color-text: #f8fbff;
-  --color-textSecondary: rgba(226, 232, 240, 0.84);
-  --color-border: rgba(148, 163, 184, 0.24);
-  --color-accent: #7dd3fc;
-  background:
-    radial-gradient(circle at top left, rgba(165, 216, 255, 0.14), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(125, 211, 252, 0.12), transparent 22%),
-    linear-gradient(180deg, rgba(9, 14, 22, 0.95), rgba(14, 22, 32, 0.92));
+  --color-primary: #60a5fa;
+  --color-secondary: #94a3b8;
+  --color-background: #111827;
+  --color-surface: #1f2937;
+  --color-text: #f9fafb;
+  --color-textSecondary: #94a3b8;
+  --color-border: #374151;
+  --color-accent: #818cf8;
+  background: var(--color-background);
   position: relative;
   overflow-x: hidden;
 }
 
 body.theme-dark::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 20% 20%, rgba(148, 197, 253, 0.08), transparent 30%),
-    radial-gradient(circle at 80% 80%, rgba(125, 211, 252, 0.08), transparent 24%);
-  z-index: -1;
+  display: none;
 }
 
 body.theme-light,
@@ -165,7 +163,7 @@ body.theme-dark {
 
 .diary-card {
   position: relative;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
 }
 
 @supports (content-visibility: auto) {
@@ -197,31 +195,11 @@ body.theme-dark {
 }
 
 .diary-card::after {
-  content: '';
-  position: absolute;
-  bottom: -1rem;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 50%;
-  height: 1px;
-  opacity: 0.3;
-  background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.14), transparent);
-}
-
-.theme-dark .diary-card::after {
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  display: none;
 }
 
 .subtle-grid {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.35;
-  background-image:
-    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: radial-gradient(circle at center, black 42%, transparent 86%);
+  display: none;
 }
 
 .welcome-page {
@@ -233,6 +211,11 @@ body.theme-dark {
 .app-header,
 .diary-card {
   backdrop-filter: blur(22px);
+}
+
+.app-header.app-header--clear {
+  -webkit-backdrop-filter: blur(6px) !important;
+  backdrop-filter: blur(6px) !important;
 }
 
 .status-pill {
@@ -265,13 +248,18 @@ body.theme-dark {
   font-family: inherit;
 }
 
-.theme-dark .app-header,
 .theme-dark .welcome-panel,
 .theme-dark .diary-card,
 .theme-dark .location-detail-modal > div {
-  background: rgba(10, 18, 28, 0.62) !important;
-  border: 1px solid rgba(148, 163, 184, 0.24) !important;
-  box-shadow: 0 22px 48px rgba(4, 10, 18, 0.22) !important;
+  background: #1f2937 !important;
+  border: 1px solid #374151 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+.theme-dark .app-header {
+  background: rgba(10, 18, 28, 0.34) !important;
+  border: 1px solid rgba(148, 163, 184, 0.18) !important;
+  box-shadow: 0 12px 28px rgba(4, 10, 18, 0.16) !important;
 }
 
 .theme-dark .primary-button {

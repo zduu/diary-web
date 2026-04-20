@@ -56,7 +56,7 @@ interface EntrySummaryTextProps {
 
 export function getEntryMetaPillStyle(theme: ThemeConfig): CSSProperties {
   return {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.1)' : `${theme.colors.primary}10`,
+    backgroundColor: theme.mode === 'dark' ? '#374151' : '#f3f4f6',
     border: `1px solid ${theme.colors.border}`,
     color: theme.colors.textSecondary,
   };
@@ -64,7 +64,7 @@ export function getEntryMetaPillStyle(theme: ThemeConfig): CSSProperties {
 
 export function getEntryExcerptStyle(theme: ThemeConfig): CSSProperties {
   return {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : `${theme.colors.primary}10`,
+    backgroundColor: theme.mode === 'dark' ? '#111827' : '#f9fafb',
     border: `1px solid ${theme.colors.border}`,
     color: theme.colors.textSecondary,
   };
@@ -72,12 +72,9 @@ export function getEntryExcerptStyle(theme: ThemeConfig): CSSProperties {
 
 export function getEntryTagStyle(theme: ThemeConfig): CSSProperties {
   return {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.25)' : `${theme.colors.primary}20`,
-    color: theme.mode === 'dark' ? '#ffffff' : theme.colors.primary,
-    border: theme.mode === 'dark'
-      ? '1px solid rgba(255, 255, 255, 0.4)'
-      : `1px solid ${theme.colors.primary}40`,
-    backdropFilter: theme.mode === 'dark' ? 'blur(8px)' : 'none',
+    backgroundColor: theme.mode === 'dark' ? '#374151' : '#eff6ff',
+    color: theme.mode === 'dark' ? '#f9fafb' : '#3b82f6',
+    border: `1px solid ${theme.mode === 'dark' ? '#4b5563' : '#bfdbfe'}`,
   };
 }
 
@@ -159,7 +156,7 @@ export function EntrySummaryText({
   return (
     <p
       className={`${clampClassName} ${isMobile ? 'text-xs' : 'text-sm'} ${className}`.trim()}
-      style={{ color: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.8)' : theme.colors.textSecondary }}
+      style={{ color: theme.colors.textSecondary }}
     >
       {children}
     </p>
@@ -194,7 +191,7 @@ export function EntryImageGrid({
             loading="lazy"
             decoding="async"
           />
-          <div className="absolute inset-0 flex items-end justify-between bg-gradient-to-t from-black/35 via-transparent to-transparent p-3 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <div className="absolute inset-0 flex items-end justify-between bg-black/25 p-3 text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
             <span className="text-xs font-medium">{previewLabel}</span>
           </div>
         </button>

@@ -32,14 +32,14 @@ export function ViewModeToggle({
     ? VIEW_MODE_OPTIONS
     : VIEW_MODE_OPTIONS.filter((option) => option.mode !== 'archive');
   const wrapperStyle: CSSProperties = {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.48)',
+    backgroundColor: theme.mode === 'dark' ? 'rgba(55, 65, 81, 0.5)' : '#f3f4f6',
     border: `1px solid ${theme.colors.border}`,
   };
 
   const getButtonStyle = (active: boolean): CSSProperties => ({
-    background: active ? `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.accent})` : 'transparent',
+    backgroundColor: active ? theme.colors.primary : 'transparent',
     color: active ? 'white' : theme.colors.textSecondary,
-    boxShadow: active ? '0 10px 24px rgba(37, 99, 235, 0.16)' : 'none',
+    boxShadow: active ? '0 4px 12px rgba(59, 130, 246, 0.25)' : 'none',
   });
 
   return (

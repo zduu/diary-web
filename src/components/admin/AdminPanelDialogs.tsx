@@ -53,7 +53,7 @@ export function AdminConfirmDialog({
       zIndex={100000}
       panelClassName="w-full max-w-md rounded-2xl"
       panelStyle={{
-        backgroundColor: theme.colors.surface,
+        backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
         border: `1px solid ${theme.colors.border}`,
       }}
       backdropStyle={{ backgroundColor: 'rgba(0, 0, 0, 0.45)' }}
@@ -144,7 +144,7 @@ export function AdminImportModeDialog({
       zIndex={100001}
       panelClassName="w-full max-w-lg rounded-2xl"
       panelStyle={{
-        backgroundColor: theme.colors.surface,
+        backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
         border: `1px solid ${theme.colors.border}`,
       }}
       backdropStyle={{ backgroundColor: 'rgba(0, 0, 0, 0.45)' }}
@@ -162,7 +162,9 @@ export function AdminImportModeDialog({
             className="block cursor-pointer rounded-xl border p-4 transition-colors"
             style={{
               borderColor: mergeActive ? theme.colors.primary : theme.colors.border,
-              backgroundColor: mergeActive ? `${theme.colors.primary}14` : theme.colors.surface,
+              backgroundColor: mergeActive 
+                ? (theme.mode === 'dark' ? '#374151' : `${theme.colors.primary}14`)
+                : (theme.mode === 'dark' ? '#111827' : theme.colors.surface),
             }}
           >
             <div className="flex items-start gap-3">
@@ -190,7 +192,9 @@ export function AdminImportModeDialog({
             className="block cursor-pointer rounded-xl border p-4 transition-colors"
             style={{
               borderColor: overwriteActive ? '#dc2626' : theme.colors.border,
-              backgroundColor: overwriteActive ? 'rgba(220, 38, 38, 0.08)' : theme.colors.surface,
+              backgroundColor: overwriteActive 
+                ? 'rgba(220, 38, 38, 0.08)' 
+                : (theme.mode === 'dark' ? '#111827' : theme.colors.surface),
             }}
           >
             <div className="flex items-start gap-3">

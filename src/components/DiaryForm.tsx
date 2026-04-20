@@ -383,11 +383,11 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
       zIndex={50}
       padding={isMobile ? '8px' : '16px'}
       backdropStyle={{
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.45)',
         overflow: 'hidden',
         overscrollBehavior: 'contain'
       }}
-      panelClassName={`${isMobile ? 'max-w-full rounded-[1.4rem]' : 'max-w-4xl rounded-xl'} ${theme.effects.blur} w-full overflow-hidden shadow-2xl`}
+      panelClassName={`${isMobile ? 'max-w-full rounded-[1.4rem]' : 'max-w-4xl rounded-xl'} w-full overflow-hidden shadow-2xl`}
       panelStyle={{
         backgroundColor: theme.colors.background,
         overscrollBehavior: 'contain',
@@ -657,12 +657,7 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
             className={`flex ${isMobile ? 'sticky bottom-0 -mx-3 flex-wrap gap-2 px-3 pb-[calc(0.75rem+var(--safe-area-bottom,0px))] pt-3' : 'justify-end gap-3 pt-4'}`}
             style={{
               borderTop: `1px solid ${theme.colors.border}`,
-              backgroundColor: isMobile
-                ? theme.mode === 'dark'
-                  ? 'rgba(10, 18, 28, 0.95)'
-                  : 'rgba(248, 250, 252, 0.95)'
-                : 'transparent',
-              backdropFilter: isMobile ? 'blur(14px)' : undefined,
+              backgroundColor: isMobile ? theme.colors.background : 'transparent',
             }}
           >
             <button

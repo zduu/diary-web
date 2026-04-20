@@ -645,7 +645,7 @@ export function AdminPanel({
       ariaLabelledby="admin-panel-title"
       zIndex={99999}
       padding="16px"
-      backdropStyle={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+      backdropStyle={{ backgroundColor: 'rgba(0, 0, 0, 0.45)' }}
       panelClassName="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl"
       panelStyle={buildAdminPanelStyle(theme)}
     >

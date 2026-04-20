@@ -363,16 +363,16 @@ export function SearchBar({
   );
 
   const inputShellStyle: CSSProperties = {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.68)',
+    backgroundColor: theme.mode === 'dark' ? 'rgba(55, 65, 81, 0.5)' : '#f3f4f6',
     border: `1px solid ${theme.colors.border}`,
     boxShadow:
       theme.mode === 'dark'
-        ? '0 18px 36px rgba(4, 10, 18, 0.18)'
-        : '0 10px 24px rgba(15, 23, 42, 0.06)',
+        ? '0 4px 12px rgba(0, 0, 0, 0.4)'
+        : '0 4px 12px rgba(0, 0, 0, 0.05)',
   };
 
   const controlStyle: CSSProperties = {
-    backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.52)' : theme.colors.surface,
+    backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
     border: `1px solid ${theme.colors.border}`,
     color: theme.colors.text,
   };
@@ -501,7 +501,7 @@ export function SearchBar({
   const candidateAnnouncement = shouldShowListbox
     ? `当前有 ${keyboardOptions.length} 个候选项，可使用上下方向键切换，回车确认。`
     : '当前没有可用候选项。';
-  const activeSuggestionBackground = `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.accent})`;
+  const activeSuggestionBackground = theme.colors.primary;
   const suggestionScopeText = searchFilters.searchInTitle && searchFilters.searchInTags
     ? '跟随标题与标签范围'
     : searchFilters.searchInTitle
@@ -809,9 +809,10 @@ export function SearchBar({
               style={{
                 ...(showFilters
                   ? {
-                      background: `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.accent})`,
+                      backgroundColor: theme.colors.primary,
                       color: '#ffffff',
                       border: '1px solid transparent',
+                      boxShadow: '0 4px 12px rgba(59, 130, 246, 0.25)',
                     }
                   : controlStyle),
               }}

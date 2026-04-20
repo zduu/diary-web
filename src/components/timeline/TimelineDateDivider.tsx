@@ -24,14 +24,14 @@ export function TimelineDateDivider({
           className={`flex items-center justify-center rounded-full ${isMobile ? 'h-8 w-8' : 'h-10 w-10'}`}
           style={{
             backgroundColor: theme.mode === 'dark'
-              ? 'rgba(255, 255, 255, 0.2)'
-              : `${theme.colors.primary}20`,
-            border: `2px solid ${theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.4)' : theme.colors.primary}`,
+              ? '#374151'
+              : `${theme.colors.primary}10`,
+            border: `2px solid ${theme.mode === 'dark' ? '#4b5563' : theme.colors.primary}`,
           }}
         >
           <span
             className={`rounded-full ${isMobile ? 'h-2.5 w-2.5' : 'h-3 w-3'}`}
-            style={{ backgroundColor: theme.mode === 'dark' ? 'white' : theme.colors.primary }}
+            style={{ backgroundColor: theme.mode === 'dark' ? '#f9fafb' : theme.colors.primary }}
             aria-hidden="true"
           />
         </div>
@@ -39,8 +39,7 @@ export function TimelineDateDivider({
           <h2
             className={`${isMobile ? 'text-lg' : 'text-xl'} font-bold`}
             style={{
-              color: theme.mode === 'dark' ? 'white' : theme.colors.text,
-              textShadow: theme.mode === 'dark' ? '0 2px 4px rgba(0, 0, 0, 0.3)' : 'none',
+              color: theme.mode === 'dark' ? '#f9fafb' : theme.colors.text,
             }}
           >
             {dateGroup}
@@ -51,7 +50,7 @@ export function TimelineDateDivider({
           <div
             className={`${isMobile ? 'mt-1.5' : 'mt-2'} h-px opacity-20`}
             style={{
-              backgroundColor: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.5)' : theme.colors.border,
+              backgroundColor: theme.mode === 'dark' ? '#4b5563' : theme.colors.border,
             }}
           />
         </div>

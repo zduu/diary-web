@@ -115,7 +115,7 @@ export function ArchiveView({ entries, onEdit, highlightEntryId = null }: Archiv
         <div
           className="flex gap-2 overflow-x-auto rounded-[1.4rem] p-2"
           style={{
-            backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.08)' : 'rgba(255, 255, 255, 0.6)',
+            backgroundColor: theme.mode === 'dark' ? 'rgba(55, 65, 81, 0.5)' : '#f3f4f6',
             border: `1px solid ${theme.colors.border}`,
           }}
         >
@@ -131,7 +131,7 @@ export function ArchiveView({ entries, onEdit, highlightEntryId = null }: Archiv
               }}
               className="shrink-0 rounded-2xl px-3 py-2 text-left transition-transform duration-200 hover:-translate-y-0.5"
               style={{
-                backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.52)' : theme.colors.surface,
+                backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
                 border: `1px solid ${theme.colors.border}`,
                 color: theme.colors.text,
               }}
@@ -175,7 +175,7 @@ export function ArchiveView({ entries, onEdit, highlightEntryId = null }: Archiv
                           <ChevronRight className="w-3 h-3" style={{ color: theme.colors.primary }} />
                         )}
                         <span className="text-sm font-medium"
-                              style={{ color: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : theme.colors.text }}>
+                              style={{ color: theme.colors.text }}>
                           {subGroup.title} ({subGroup.count})
                         </span>
                       </button>

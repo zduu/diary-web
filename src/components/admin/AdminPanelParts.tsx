@@ -91,13 +91,13 @@ function getActionButtonStyle(variant: ActionButtonProps['variant'], theme: Them
     case 'primary':
       return {
         ...baseStyles,
-        backgroundColor: `${theme.colors.primary}20`,
-        color: theme.colors.primary,
+        backgroundColor: theme.mode === 'dark' ? '#374151' : `${theme.colors.primary}20`,
+        color: theme.mode === 'dark' ? '#f9fafb' : theme.colors.primary,
       };
     case 'danger':
       return {
         ...baseStyles,
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        backgroundColor: theme.mode === 'dark' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(239, 68, 68, 0.1)',
         color: '#ef4444',
       };
     case 'secondary':
@@ -202,7 +202,9 @@ export function AdminEntryListItem({
     <div
       className="admin-entry-shell flex items-center justify-between rounded-lg border p-3"
       style={{
-        backgroundColor: entry.hidden ? 'rgba(255, 0, 0, 0.1)' : theme.colors.surface,
+        backgroundColor: entry.hidden 
+          ? (theme.mode === 'dark' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255, 0, 0, 0.1)')
+          : theme.colors.surface,
         borderColor: theme.colors.border,
       }}
     >

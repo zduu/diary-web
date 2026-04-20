@@ -290,7 +290,7 @@ export function QuickFilters({
           <span
             className="rounded-full px-2 py-1 text-[11px]"
             style={{
-              backgroundColor: theme.mode === 'dark' ? 'rgba(148, 163, 184, 0.12)' : `${theme.colors.primary}12`,
+              backgroundColor: theme.mode === 'dark' ? '#374151' : '#f3f4f6',
               color: theme.colors.textSecondary,
               border: `1px solid ${theme.colors.border}`,
             }}
@@ -305,14 +305,12 @@ export function QuickFilters({
             className={`flex items-center gap-1 rounded-full transition-colors ${isMobile ? 'px-2.5 py-1 text-xs' : 'px-3 py-1.5 text-sm'}`}
             style={{
               backgroundColor: theme.mode === 'dark'
-                ? 'rgba(148, 163, 184, 0.16)'
-                : `${theme.colors.accent}16`,
+                ? '#374151'
+                : '#eff6ff',
               color: theme.mode === 'dark'
-                ? theme.colors.text
-                : theme.colors.accent,
-              border: `1px solid ${theme.mode === 'dark' ? theme.colors.border : `${theme.colors.accent}35`}`,
-              textShadow: 'none',
-              backdropFilter: theme.mode === 'dark' ? 'blur(10px)' : 'none'
+                ? '#f9fafb'
+                : '#3b82f6',
+              border: `1px solid ${theme.mode === 'dark' ? '#4b5563' : '#bfdbfe'}`,
             }}
           >
             <X className="w-3 h-3" />

@@ -79,8 +79,8 @@ export function AdminLoginView({
         <div
           className="space-y-3 rounded-xl border p-4"
           style={{
-            backgroundColor: isDarkLike ? 'rgba(15, 23, 42, 0.8)' : theme.colors.surface,
-            borderColor: theme.mode === 'dark' ? 'rgba(99, 102, 241, 0.3)' : theme.colors.border,
+            backgroundColor: isDarkLike ? '#1f2937' : theme.colors.surface,
+            borderColor: theme.colors.border,
           }}
         >
           <input
@@ -194,8 +194,8 @@ export function AdminLoginView({
           <div
             className="rounded-lg border p-1"
             style={{
-              backgroundColor: isDarkLike ? 'rgba(15, 23, 42, 0.8)' : theme.colors.surface,
-              borderColor: theme.mode === 'dark' ? 'rgba(99, 102, 241, 0.3)' : theme.colors.border,
+              backgroundColor: isDarkLike ? '#1f2937' : theme.colors.surface,
+              borderColor: theme.colors.border,
             }}
           >
             <IconTextInput
@@ -314,7 +314,7 @@ export function AdminPanelHeaderActions({
       style={{
         backgroundColor: 'rgba(239, 68, 68, 0.1)',
         color: '#ef4444',
-        border: '1px solid rgba(239, 68, 68, 0.3)',
+        border: '1px solid rgba(239, 68, 68, 0.2)',
       }}
     >
       退出登录

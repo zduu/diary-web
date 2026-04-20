@@ -88,17 +88,16 @@ export function EntryPreviewModal({
       onClose={onClose}
       zIndex={9998}
       backdropStyle={{
-        backgroundColor: 'rgba(15, 23, 42, 0.36)',
-        backdropFilter: 'blur(10px)',
+        backgroundColor: 'rgba(0, 0, 0, 0.45)',
       }}
-      panelClassName={`mx-4 w-full max-w-3xl overflow-hidden rounded-[2rem] ${theme.effects.blur}`}
+      panelClassName={`mx-4 w-full max-w-3xl overflow-hidden rounded-[2rem]`}
       panelStyle={{
-        backgroundColor: theme.mode === 'dark' ? 'rgba(10, 18, 28, 0.82)' : theme.colors.surface,
+        backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
         border: `1px solid ${theme.colors.border}`,
         boxShadow:
           theme.mode === 'dark'
-            ? '0 30px 70px rgba(4, 10, 18, 0.38)'
-            : '0 24px 56px rgba(15, 23, 42, 0.14)',
+            ? '0 4px 12px rgba(0, 0, 0, 0.4)'
+            : '0 4px 12px rgba(0, 0, 0, 0.1)',
       }}
     >
       <ModalHeader
@@ -163,8 +162,9 @@ export function EntryPreviewModal({
                 }}
                 className={`rounded-xl text-sm font-medium transition-transform duration-200 hover:-translate-y-0.5 ${isMobile ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}
                 style={{
-                  background: `linear-gradient(135deg, ${theme.colors.primary}, ${theme.colors.accent})`,
+                  backgroundColor: theme.colors.primary,
                   color: '#ffffff',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.25)',
                 }}
               >
                 编辑
@@ -211,7 +211,7 @@ export function EntryPreviewModal({
           />
         </div>
 
-        <div className={`mb-4 flex flex-wrap ${isMobile ? 'gap-1.5 text-xs' : 'gap-2 text-sm'}`} style={{ color: theme.colors.textSecondary }}>
+        <div className={`mb-4 flex flex-wrap ${isMobile ? 'gap-1.5' : 'gap-2'} text-sm`} style={{ color: theme.colors.textSecondary }}>
           <EntryMetaPill theme={theme}>
             <Calendar className="h-3.5 w-3.5" />
             {formatFullDateTime(entry.created_at!)}
@@ -271,7 +271,7 @@ export function EntryPreviewModal({
                       style={{
                         width: isMobile ? '74px' : '92px',
                         border: `2px solid ${isActive ? theme.colors.primary : theme.colors.border}`,
-                        boxShadow: isActive ? '0 10px 22px rgba(37, 99, 235, 0.16)' : 'none',
+                        boxShadow: isActive ? '0 4px 12px rgba(0, 0, 0, 0.1)' : 'none',
                       }}
                     >
                       <img
