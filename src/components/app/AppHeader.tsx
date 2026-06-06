@@ -107,13 +107,13 @@ export function AppHeader({
 
               <div className="min-w-0">
                 <h1
-                  className={`${isMobile ? 'text-lg' : 'text-xl md:text-3xl'} font-semibold tracking-[-0.04em]`}
+                  className={`${isMobile ? 'text-lg' : 'text-xl md:text-2xl'} font-semibold tracking-normal`}
                   style={{ color: theme.colors.text }}
                 >
                   我的日记
                 </h1>
                 <p className={`${isMobile ? 'block text-[11px]' : 'hidden text-xs sm:block md:text-sm'}`} style={{ color: theme.colors.textSecondary }}>
-                  记录生活，留住美好，也让界面轻一点
+                  安静记录每一天
                 </p>
               </div>
             </div>

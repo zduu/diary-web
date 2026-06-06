@@ -29,7 +29,7 @@ export function MapPickerConfigNotice({ isOpen, onClose }: MapPickerConfigNotice
         <p className="mb-4 text-sm" style={{ color: theme.colors.textSecondary }}>
           地图选择功能需要配置高德地图的JavaScript API密钥。
           <br />
-          请查看配置指南：docs/amap-api-setup.md
+          请查看配置指南：docs/deployment.md
         </p>
         <div className="flex justify-center gap-2">
           <button

@@ -68,8 +68,8 @@
 # 进入项目目录
 cd diary-web
 
-# 安装依赖
-npm install
+# 安装依赖（按 lockfile 还原，适合本地检查和 CI）
+npm ci
 
 # 运行最小安全回归测试
 # 包含函数鉴权、上传、统计接口、管理员面板与位置选择关键 UI 流程
@@ -86,14 +86,14 @@ npm start
 npm run start:network
 
 # 本地预览 Cloudflare Functions / D1 行为
-# 如需本地 Wrangler 配置，可先复制模板：
-# cp wrangler.example.toml wrangler.toml
-# 然后按你的 Cloudflare 资源补齐绑定信息
+# 默认不需要 wrangler.toml，脚本会使用本地 diary-db 绑定
 npm run db:init
 # 如需开发样例数据，再执行：
 # wrangler d1 execute diary-db --local --file=seed.dev.sql
 npm run start:remote
 ```
+
+`wrangler.toml` 仅在你要用命令行部署或固定一套本地 Wrangler 真源配置时才需要复制；默认生产部署由 Cloudflare Pages Dashboard 管理绑定和变量。
 
 应用将在 http://localhost:5173 启动
 
@@ -111,29 +111,9 @@ npm run start:remote
 - 创建并推送 APK tag 后，GitHub 会自动构建 APK、上传 artifact，并创建同名 Release。
 - Android 打包说明见 `docs/android-apk-setup.md`
 
-### 🗺️ 高德地图API配置（推荐）
+### 🗺️ 高德地图 API（可选）
 
-为了获得最准确的位置识别，建议配置高德地图API：
-
-1. **申请API密钥**：
-   - 访问 [高德开放平台](https://lbs.amap.com/)
-   - 注册账号并创建应用
-   - 获取Web服务API密钥
-
-2. **配置密钥**：
-   ```bash
-   # 复制配置文件
-   cp .env.example .env.local
-
-   # 编辑配置文件
-   VITE_AMAP_WEB_KEY=你的高德地图API密钥
-   ```
-
-3. **详细配置指南**：查看 `docs/amap-api-setup.md`
-
-**免费配额**：每日100万次调用，个人使用完全够用
-
-**备用方案**：如果不配置API密钥，系统会自动使用智能离线模式
+配置 `VITE_AMAP_WEB_KEY`、`VITE_AMAP_JS_KEY` 与 `VITE_AMAP_SECURITY_CODE` 后，可启用更完整的地图选点、定位和地址回填。未配置时仍可使用离线位置模式。配置方式见 `docs/deployment.md`。
 
 ### 初始密码
 - 生产环境默认不写入任何固定密码
@@ -171,70 +151,17 @@ Android APK 推荐只通过 GitHub Actions 构建，不在本机安装 Android S
 
 ### Cloudflare Pages 部署（推荐）
 
-1. **在 Cloudflare 中创建 Pages 项目**
-   - 登录 [Cloudflare Dashboard](https://dash.cloudflare.com)
-   - 进入 "Workers & Pages" > "Pages"，创建一个 Pages 项目
-   - 连接你的 Git 仓库
-   - 将构建产物目录设置为 `dist`
+完整部署、上线检查、Secrets、D1/R2、高德地图、统计接口、安全迁移和回滚流程统一维护在 `docs/deployment.md`。
 
-2. **配置构建设置**
-   - 构建命令: `npm ci && npm run build`
-   - 构建输出目录: `dist`
+最小发布路径：
 
-3. **在 Dashboard 配置绑定与变量**
-   - 仓库默认不提交 `wrangler.toml`，线上 Pages 绑定建议直接在 Cloudflare Dashboard 管理
-   - 至少手动绑定一个 D1 数据库，变量名固定为 `DB`
-   - 如需 R2 图片上传，可额外绑定 R2 bucket，变量名固定为 `IMAGES_BUCKET`
-   - `wrangler.example.toml` 仅作为本地 Wrangler 开发模板，不会自动接管线上配置
+1. Cloudflare Pages 构建命令设为 `npm ci && npm run build`，输出目录设为 `dist`。
+2. 在 Dashboard 绑定 D1 到 `DB`，按需绑定 R2 到 `IMAGES_BUCKET`。
+3. 配置 `SESSION_SECRET`，按需配置 `ADMIN_BOOTSTRAP_PASSWORD`、`APP_BOOTSTRAP_PASSWORD`、`SYNC_ACCESS_TOKEN`、`STATS_API_KEY`。
+4. 执行 `schema.sql`，旧库按 `docs/deployment.md` 补齐迁移。
+5. 本地执行 `npm run check`，再部署 Preview / Staging 验收。
 
-4. **配置数据库**
-   - 在 Cloudflare Dashboard 中创建 D1 数据库 `diary-db`
-   - 在 Pages 项目的 `Settings > Bindings` 中把该数据库绑定到变量名 `DB`
-   - 在 D1 数据库的 "Console" 中执行 `schema.sql` 的内容
-   - 如果你的数据库是旧版本升级到当前版本，还需要额外执行 `migrations/2026-04-18-add-entry-uuid.sql`
-   - 旧版云端数据库在启用新版 APK 远程绑定与手动同步前，必须先完成这次 `entry_uuid` 迁移，否则历史内容与后续同步兼容性无法保证
-   - 不要在生产环境执行 `seed.dev.sql`
-
-5. **配置 Secrets**
-   - 推荐在 Pages 项目的 `Settings > Variables and Secrets` 中直接配置
-   - 也可以用命令行运行 `wrangler secret put SESSION_SECRET`
-   - 建议：配置 `ADMIN_BOOTSTRAP_PASSWORD`
-   - 可选：配置 `APP_BOOTSTRAP_PASSWORD`
-   - 如需 APK / 本地设备手动同步到线上：配置 `SYNC_ACCESS_TOKEN`
-   - 可选：配置 `STATS_API_KEY`
-   - 如需使用旧版 Cloudflare Images 上传：配置 `IMAGES_API_TOKEN`
-
-6. **配置图片上传（可选但推荐）**
-   - 推荐：在 Cloudflare Dashboard 中配置 R2 bucket 绑定，变量名为 `IMAGES_BUCKET`
-   - 绑定后系统会自动启用 R2 上传，不需要额外图片 secret
-   - 如不使用 R2，仍可回退到 Cloudflare Images
-   - 旧版需要在 Cloudflare 项目变量中配置 `IMAGES_ACCOUNT_ID`
-   - 旧版可选配置 `IMAGES_DELIVERY_URL`（自定义交付域名前缀）
-   - 旧版可选配置 `IMAGES_VARIANT`（默认 `public`）
-   - 完整说明见 `docs/image-upload-setup.md`
-
-7. **统计接口说明（可选）**
-   - 统计接口的鉴权与调用方式见 `docs/stats-api.md`
-
-8. **完成部署**
-   - 提交并推送代码，无需额外提交本地 `wrangler.toml`
-   - 等待 Cloudflare Pages 基于当前仓库重新构建部署
-   - 如使用命令行部署，可执行 `npm run build` 后再按你的 Pages 发布流程部署 `dist`
-
-9. **安全迁移检查**
-   - 按 [docs/security-migration.md](docs/security-migration.md) 完成 secrets、密码迁移和验收检查
-
-10. **历史版本平滑切换到最新版（含 master）**
-   - 按 [docs/release-master-cutover.md](docs/release-master-cutover.md) 执行备份、预发验证、切主分支和回滚预案
-
-11. **上线前最终核对**
-   - 按 [docs/production-checklist.md](docs/production-checklist.md) 完成构建、配置、安全与 smoke test 检查
-   - 可直接执行 `npm run check`，其中已包含 `npm run smoke:dist`、`npm run check:release` 与 `npm run check:cloudflare`
-   - 对预发地址可执行 `npm run smoke:remote -- https://你的-preview-域名`
-   - 如已有预发管理员口令，可执行 `SMOKE_ADMIN_PASSWORD='你的密码' npm run smoke:remote:admin -- https://你的-preview-域名`
-   - 如仅需单独复核 Cloudflare 本地配置，可执行 `npm run check:cloudflare`；如已登录 wrangler，可进一步执行 `npm run check:cloudflare:remote`
-   - 如需生成本次发版留档，可执行 `npm run report:release`，报告默认输出到 `reports/`
-   - 如仅本地调试静态预览，可执行 `npm run smoke:remote -- http://127.0.0.1:4173 --skip-security-headers --skip-api-check`
+仓库默认不提交 `wrangler.toml`，线上绑定与变量由 Cloudflare Pages Dashboard 管理；`wrangler.example.toml` 仅用于命令行部署或固定本地 Wrangler 配置。
 
 ## 🛠️ 技术栈
 
@@ -244,7 +171,7 @@ Android APK 推荐只通过 GitHub Actions 构建，不在本机安装 Android S
 
 ## 🧱 前端维护约定
 
-- `src/App.tsx` 只保留应用级会话流转、欢迎页/密码页切换、主内容装配和弹窗入口；更完整的结构说明见 `docs/frontend-architecture.md`。
+- `src/App.tsx` 只保留应用级会话流转、欢迎页/密码页切换、主内容装配和弹窗入口。
 - `src/components/app/AppHeader.tsx` 负责顶部操作区；`src/components/app/AppBrowsePanel.tsx` 负责搜索、筛选、视图和导出；`src/components/app/ActiveBrowseSummary.tsx` 负责当前浏览结果摘要。
 - `src/components/app/appShellStyles.ts` 是主应用与欢迎页共用的壳层视觉来源，新增应用级表面或按钮皮肤优先从这里扩展。
 - `src/components/app/AppHeader.tsx` 与 `src/components/ThemeToggle.tsx` 在移动端优先保证轻量尺寸和更短的页头高度，不要为了品牌区把首条内容继续向下挤。
@@ -307,7 +234,7 @@ Android APK 推荐只通过 GitHub Actions 构建，不在本机安装 Android S
 - `src/services/mockApiService.ts` 的 mock 延迟模拟和管理员权限校验统一走模块内 request helper；新增 mock 接口时不要再手写 `await wait(...)` 加 `requireAdminSession()` 组合。
 - `src/services/mockApiService.ts` 的公开布尔设置键与默认值统一集中维护，设置读取与写入都必须复用同一套 key 判断和默认值回退逻辑。
 - `src/index.css` 与 `index.html` 共同维护跳转链接、焦点样式、降低动效和元信息等上线向前端基线，不要把这些能力散落到页面组件各自补丁。
-- 每次迭代后台功能后，至少执行一次 `npm run check`，确保 lint、函数测试、UI 测试、构建、静态产物 smoke、发布配置校验与 Cloudflare 本地配置检查一起通过。
+- 每次迭代后台功能后，至少执行一次 `npm run check`，确保 lint、函数测试、UI 测试、构建、静态产物 smoke、发布配置校验与 Cloudflare 本地配置检查一起通过。默认 Dashboard 管理部署时，Cloudflare 检查只校验本地可确认项并提示人工核对线上绑定。
 
 ## 🎯 使用指南
 
@@ -341,7 +268,7 @@ A: 确保已部署到 Cloudflare，并检查 `SESSION_SECRET` 是否已配置；
 A: 这是 Cloudflare D1 分布式数据库的一致性问题，已在最新版本中修复
 
 **Q: 如何配置数据库？**
-A: 默认推荐在 Cloudflare Pages Dashboard 中手动绑定 D1 到 `DB`；如需本地 Wrangler 开发，再复制 `wrangler.example.toml` 为 `wrangler.toml` 并填入你自己的数据库 ID
+A: 默认推荐在 Cloudflare Pages Dashboard 中手动绑定 D1 到 `DB`；如需命令行部署或固定本地 Wrangler 配置，再复制 `wrangler.example.toml` 为 `wrangler.toml` 并填入你自己的数据库 ID
 
 **Q: 移动端编辑体验如何？**
 A: 已专门优化移动端编辑界面，提供更大编辑空间和简化的操作流程

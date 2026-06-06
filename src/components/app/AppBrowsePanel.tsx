@@ -223,14 +223,14 @@ export function AppBrowsePanel({
               reading desk
             </div>
             <h2
-              className={`${isMobile ? 'text-xl leading-tight' : 'text-2xl md:text-3xl'} font-semibold tracking-[-0.04em]`}
+              className={`${isMobile ? 'text-xl leading-tight' : 'text-2xl md:text-3xl'} font-semibold tracking-normal`}
               style={{ color: theme.colors.text }}
             >
-              {isMobile ? '先找到内容，再继续读。' : '先找到要看的内容，再安静地读下去。'}
+              {isMobile ? '浏览日记' : '浏览与回看'}
             </h2>
             <p className={`max-w-xl text-sm ${isMobile ? 'mt-2.5 leading-6' : 'mt-3 leading-7 md:text-base'}`} style={{ color: theme.colors.textSecondary }}>
-              当前展示 {displayEntriesCount} 篇内容，可见总数 {accessibleEntriesCount} 篇。
-              {isMobile ? '工具收紧到一层，下面优先留给阅读区。' : '搜索、筛选和视图切换都收进这一层，下面只保留阅读区。'}
+              当前展示 {displayEntriesCount} 篇，可见 {accessibleEntriesCount} 篇。
+              {activeBrowse.mode ? ` 正在查看${activeBrowse.label}结果。` : ' 可直接搜索、筛选或切换视图。'}
             </p>
           </div>
 
@@ -379,8 +379,8 @@ export function AppBrowsePanel({
                   </div>
                   <div className={`${isMobile ? 'mt-1 text-xs leading-5' : 'mt-1.5 text-sm leading-6'}`} style={{ color: theme.colors.textSecondary }}>
                     {isStandalone
-                      ? '已接近原生应用形态打开。'
-                      : '可添加到手机主屏幕或桌面，保留更像本地应用的入口。'}
+                      ? '独立窗口运行中。'
+                      : '可作为 Web App 使用。'}
                   </div>
                 </div>
 
@@ -418,9 +418,9 @@ export function AppBrowsePanel({
                 <div className={`${isMobile ? 'text-xs leading-5' : 'text-sm leading-6'}`} style={{ color: theme.colors.textSecondary }}>
                   {canToggleDataMode
                     ? (dataMode === 'local'
-                      ? '当前使用设备本地数据，适合 APK 离线记录。后续需要联动云端时，可切换到远程 Pages 模式。'
-                      : '当前连接 Cloudflare Pages / Functions。适合和线上项目保持同一套数据入口。')
-                    : '当前构建已固定为设备本地数据入口。需要联动云端时，请在管理员面板完成远程绑定并手动同步。'}
+                      ? '当前使用设备本地数据，适合离线记录。'
+                      : '当前连接 Cloudflare Pages / Functions。')
+                    : '当前构建固定为本地数据入口，远程同步在管理员面板管理。'}
                 </div>
 
                 {canToggleDataMode ? (
@@ -462,9 +462,9 @@ export function AppBrowsePanel({
                 <div className={`rounded-2xl ${isMobile ? 'space-y-2 p-2.5' : 'space-y-3 p-3'}`} style={shellSurfaceStyle}>
                   <div className={`${isMobile ? 'text-xs leading-5' : 'text-sm leading-6'}`} style={{ color: theme.colors.textSecondary }}>
                     {canPromptInstall
-                      ? '浏览器已准备好安装入口，安装后可更像本地应用一样从主屏幕或桌面打开。'
+                      ? '浏览器已准备好安装入口。'
                       : lastOutcome === 'accepted'
-                        ? '安装请求已接受，浏览器完成安装后就能以独立应用方式打开。'
+                        ? '安装请求已接受。'
                         : lastOutcome === 'dismissed'
                           ? '已关闭安装弹窗，稍后仍可从浏览器菜单中安装。'
                           : manualInstallHint}

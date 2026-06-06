@@ -1,18 +1,16 @@
 import {
   assertIncludes,
   fileExists,
-  loadWranglerReleaseConfig,
+  loadReleaseConfig,
   readRootText,
 } from './lib/release-config.mjs';
 
 const requiredFiles = [
   '_headers',
-  'wrangler.toml',
+  'wrangler.example.toml',
   'schema.sql',
   'README.md',
-  'docs/production-checklist.md',
-  'docs/release-master-cutover.md',
-  'docs/security-migration.md',
+  'docs/deployment.md',
   'public/apple-touch-icon.png',
   'public/favicon.svg',
   'public/icon-192.png',
@@ -22,6 +20,7 @@ const requiredFiles = [
 ];
 
 const errors = [];
+const warnings = [];
 
 for (const relativePath of requiredFiles) {
   // eslint-disable-next-line no-await-in-loop
@@ -36,28 +35,34 @@ assertIncludes(headersContent, 'Content-Security-Policy:', '_headers 缺少 Cont
 assertIncludes(headersContent, 'Strict-Transport-Security:', '_headers 缺少 Strict-Transport-Security', errors);
 assertIncludes(headersContent, 'X-Content-Type-Options: nosniff', '_headers 缺少 X-Content-Type-Options', errors);
 
-const wranglerConfig = await loadWranglerReleaseConfig();
-assertIncludes(wranglerConfig.active, '[[d1_databases]]', 'wrangler.toml 缺少 D1 数据库绑定配置', errors);
+const wranglerConfig = await loadReleaseConfig({ allowDashboardManaged: true });
 
 if (wranglerConfig.pagesBuildOutputDir !== 'dist') {
-  errors.push('wrangler.toml 未声明 Pages 构建输出目录 dist');
+  errors.push(`${wranglerConfig.sourcePath} 未声明 Pages 构建输出目录 dist`);
 }
 
-if (wranglerConfig.d1Binding !== 'DB') {
-  errors.push('wrangler.toml 缺少 DB 绑定');
-}
+if (wranglerConfig.dashboardManaged) {
+  warnings.push('未发现 wrangler.toml，按 Dashboard 管理生产绑定的轻量发布方式校验');
+  warnings.push('上线前需在 Cloudflare Dashboard 确认 D1 绑定名为 DB，图片上传按需绑定 IMAGES_BUCKET');
+} else {
+  assertIncludes(wranglerConfig.active, '[[d1_databases]]', 'wrangler.toml 缺少 D1 数据库绑定配置', errors);
 
-if (!wranglerConfig.d1DatabaseName || !wranglerConfig.d1DatabaseId) {
-  errors.push('wrangler.toml 缺少 D1 数据库名称或 database_id');
-}
+  if (wranglerConfig.d1Binding !== 'DB') {
+    errors.push('wrangler.toml 缺少 DB 绑定');
+  }
 
-if (/preview_id\s*=/.test(wranglerConfig.active)) {
-  errors.push('wrangler.toml 仍包含 preview_id，请确认是否保留了过时 KV 预览配置');
+  if (!wranglerConfig.d1DatabaseName || !wranglerConfig.d1DatabaseId) {
+    errors.push('wrangler.toml 缺少 D1 数据库名称或 database_id');
+  }
+
+  if (/preview_id\s*=/.test(wranglerConfig.active)) {
+    errors.push('wrangler.toml 仍包含 preview_id，请确认是否保留了过时 KV 预览配置');
+  }
 }
 
 const readmeContent = await readRootText('README.md');
-assertIncludes(readmeContent, 'docs/production-checklist.md', 'README.md 未链接上线检查清单', errors);
-assertIncludes(readmeContent, 'docs/stats-api.md', 'README.md 未链接统计接口文档', errors);
+assertIncludes(readmeContent, 'docs/deployment.md', 'README.md 未链接部署与上线文档', errors);
+assertIncludes(readmeContent, 'docs/android-apk-setup.md', 'README.md 未链接 Android APK 文档', errors);
 
 const indexHtmlContent = await readRootText('index.html');
 assertIncludes(indexHtmlContent, 'href="/manifest.webmanifest"', 'index.html 未引用 manifest.webmanifest', errors);
@@ -90,6 +95,13 @@ if (errors.length > 0) {
     console.error(`- ${error}`);
   }
   process.exit(1);
+}
+
+if (warnings.length > 0) {
+  console.log('发布校验提示:');
+  for (const warning of warnings) {
+    console.log(`- ${warning}`);
+  }
 }
 
 console.log('发布校验通过');

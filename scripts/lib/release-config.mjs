@@ -110,5 +110,26 @@ export function parseWranglerReleaseConfig(content) {
 
 export async function loadWranglerReleaseConfig() {
   const wranglerContent = await readRootText('wrangler.toml');
-  return parseWranglerReleaseConfig(wranglerContent);
+  return {
+    ...parseWranglerReleaseConfig(wranglerContent),
+    sourcePath: 'wrangler.toml',
+    dashboardManaged: false,
+  };
+}
+
+export async function loadReleaseConfig({ allowDashboardManaged = false } = {}) {
+  if (await fileExists('wrangler.toml')) {
+    return loadWranglerReleaseConfig();
+  }
+
+  if (!allowDashboardManaged) {
+    return loadWranglerReleaseConfig();
+  }
+
+  const exampleContent = await readRootText('wrangler.example.toml');
+  return {
+    ...parseWranglerReleaseConfig(exampleContent),
+    sourcePath: 'wrangler.example.toml',
+    dashboardManaged: true,
+  };
 }

@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { loadWranglerReleaseConfig, rootDir } from './lib/release-config.mjs';
+import { loadReleaseConfig, rootDir } from './lib/release-config.mjs';
 
 const execFileAsync = promisify(execFile);
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -146,7 +146,7 @@ for (const step of steps) {
 }
 
 const packageJson = JSON.parse(await readFile(path.join(rootDir, 'package.json'), 'utf8'));
-const wranglerConfig = await loadWranglerReleaseConfig();
+const wranglerConfig = await loadReleaseConfig({ allowDashboardManaged: true });
 const gitBranch = await safeGit(['rev-parse', '--abbrev-ref', 'HEAD']);
 const gitCommit = await safeGit(['rev-parse', 'HEAD']);
 const gitShortCommit = await safeGit(['rev-parse', '--short', 'HEAD']);
@@ -180,6 +180,7 @@ const report = [
   `- 版本: ${packageJson.version}`,
   `- 分支: ${gitBranch ?? '未知'}`,
   `- 提交: ${gitShortCommit ?? gitCommit ?? '未知'}`,
+  `- 发布配置: ${wranglerConfig.dashboardManaged ? 'Cloudflare Dashboard 管理' : wranglerConfig.sourcePath}`,
   `- Pages 项目: ${wranglerConfig.projectName ?? '未知'}`,
   `- D1 数据库: ${wranglerConfig.d1DatabaseName ?? '未知'}`,
   `- 预发地址: ${smokeUrl ?? '未提供'}`,

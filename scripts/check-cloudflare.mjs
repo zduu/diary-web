@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
-  loadWranglerReleaseConfig,
+  loadReleaseConfig,
   optionalImageSecretKeys,
   requiredSecretKeys,
   recommendedSecretKeys,
@@ -69,28 +69,33 @@ const projectOverride = readOption('--project');
 const databaseOverride = readOption('--database');
 const smokeUrl = readOption('--smoke-url');
 
-const wranglerConfig = await loadWranglerReleaseConfig();
+const wranglerConfig = await loadReleaseConfig({ allowDashboardManaged: true });
 const projectName = projectOverride || wranglerConfig.projectName;
 const databaseName = databaseOverride || wranglerConfig.d1DatabaseName;
 
 if (!projectName) {
-  pushError(errors, '无法从 wrangler.toml 解析项目名，请使用 --project 指定');
+  pushError(errors, `无法从 ${wranglerConfig.sourcePath} 解析项目名，请使用 --project 指定`);
 }
 
 if (wranglerConfig.pagesBuildOutputDir !== 'dist') {
-  pushError(errors, 'wrangler.toml 的 pages_build_output_dir 不是 dist');
+  pushError(errors, `${wranglerConfig.sourcePath} 的 pages_build_output_dir 不是 dist`);
 }
 
-if (wranglerConfig.d1Binding !== 'DB') {
-  pushError(errors, 'wrangler.toml 的 D1 绑定不是 DB');
-}
+if (wranglerConfig.dashboardManaged) {
+  warnings.push('未发现 wrangler.toml，当前按 Cloudflare Dashboard 管理绑定与变量的发布方式检查');
+  warnings.push('本地无法读取 Dashboard 绑定详情；上线前需确认 Pages 项目已绑定 D1 到 DB');
+} else {
+  if (wranglerConfig.d1Binding !== 'DB') {
+    pushError(errors, 'wrangler.toml 的 D1 绑定不是 DB');
+  }
 
-if (!databaseName) {
-  pushError(errors, '无法从 wrangler.toml 解析 database_name，请使用 --database 指定');
-}
+  if (!databaseName) {
+    pushError(errors, '无法从 wrangler.toml 解析 database_name，请使用 --database 指定');
+  }
 
-if (!wranglerConfig.d1DatabaseId) {
-  pushError(errors, 'wrangler.toml 缺少 database_id');
+  if (!wranglerConfig.d1DatabaseId) {
+    pushError(errors, 'wrangler.toml 缺少 database_id');
+  }
 }
 
 if (wranglerConfig.environment !== 'production') {
@@ -136,7 +141,7 @@ if (!remoteMode) {
     }
   }
 
-  if (errors.length === 0 && !skipD1) {
+  if (errors.length === 0 && !skipD1 && databaseName) {
     try {
       const d1Info = await runWranglerJson(['d1', 'info', databaseName]);
       const remoteDatabaseId = extractDatabaseId(d1Info);
@@ -149,6 +154,8 @@ if (!remoteMode) {
     } catch (error) {
       pushError(errors, `无法读取 D1 信息: ${databaseName}`);
     }
+  } else if (errors.length === 0 && !skipD1 && !databaseName) {
+    warnings.push('未提供 D1 数据库名，已跳过 D1 远端存在性检查；可使用 --database 指定');
   }
 
   if (smokeUrl) {

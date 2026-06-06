@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  fileExists,
+  loadReleaseConfig,
   parseWranglerReleaseConfig,
   stripTomlComments,
 } from '../scripts/lib/release-config.mjs';
@@ -47,4 +49,14 @@ IMAGES_VARIANT = "public#cdn" # keep hash
   assert.equal(config.environment, 'production');
   assert.equal(config.appTimezone, 'Asia/Shanghai');
   assert.equal(config.imagesVariant, 'public#cdn');
+});
+
+test('loadReleaseConfig supports the current release config source', async () => {
+  const config = await loadReleaseConfig({ allowDashboardManaged: true });
+  const hasWranglerToml = await fileExists('wrangler.toml');
+
+  assert.equal(config.dashboardManaged, !hasWranglerToml);
+  assert.equal(config.sourcePath, hasWranglerToml ? 'wrangler.toml' : 'wrangler.example.toml');
+  assert.equal(config.projectName, 'diary-web');
+  assert.equal(config.pagesBuildOutputDir, 'dist');
 });
