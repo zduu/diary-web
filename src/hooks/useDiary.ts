@@ -3,26 +3,7 @@ import type { DiaryEntry } from '../types/index.ts';
 import { apiService } from '../services/api';
 import { readOfflineEntrySnapshot } from '../utils/offlineEntrySnapshot.ts';
 import { debugWarn } from '../utils/logger.ts';
-
-function compareEntries(a: DiaryEntry, b: DiaryEntry) {
-  const createdAtDiff = new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-
-  if (createdAtDiff !== 0) {
-    return createdAtDiff;
-  }
-
-  const updatedAtDiff = new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime();
-
-  if (updatedAtDiff !== 0) {
-    return updatedAtDiff;
-  }
-
-  return (b.id || 0) - (a.id || 0);
-}
-
-function sortEntries(entries: DiaryEntry[]) {
-  return [...entries].sort(compareEntries);
-}
+import { sortDiaryEntriesByTime } from '../utils/entryTime.ts';
 
 export function useDiary() {
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
@@ -44,7 +25,7 @@ export function useDiary() {
 
     setEntries((prev) => {
       const nextEntries = typeof updater === 'function' ? updater(prev) : updater;
-      const sortedEntries = sortEntries(nextEntries);
+      const sortedEntries = sortDiaryEntriesByTime(nextEntries);
       entriesRef.current = sortedEntries;
       return sortedEntries;
     });

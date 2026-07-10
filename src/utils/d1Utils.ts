@@ -10,6 +10,39 @@ export interface RetryOptions {
   baseDelay?: number;
   maxDelay?: number;
   backoffFactor?: number;
+  signal?: AbortSignal;
+}
+
+function createAbortError() {
+  return new DOMException('操作已取消', 'AbortError');
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+}
+
+function waitForRetry(delayMs: number, signal?: AbortSignal) {
+  throwIfAborted(signal);
+
+  return new Promise<void>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      signal?.removeEventListener('abort', handleAbort);
+      resolve();
+    }, delayMs);
+
+    const handleAbort = () => {
+      clearTimeout(timeoutId);
+      reject(createAbortError());
+    };
+
+    signal?.addEventListener('abort', handleAbort, { once: true });
+  });
 }
 
 /**
@@ -23,15 +56,22 @@ export async function withRetry<T>(
     maxRetries = 3,
     baseDelay = 100,
     maxDelay = 2000,
-    backoffFactor = 2
+    backoffFactor = 2,
+    signal
   } = options;
 
   let lastError: Error;
   
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    throwIfAborted(signal);
+
     try {
       return await operation();
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+
       lastError = error instanceof Error ? error : new Error(String(error));
       
       if (attempt === maxRetries) {
@@ -40,7 +80,7 @@ export async function withRetry<T>(
       
       // 计算延迟时间（指数退避）
       const delay = Math.min(baseDelay * Math.pow(backoffFactor, attempt), maxDelay);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await waitForRetry(delay, signal);
     }
   }
   
@@ -58,12 +98,15 @@ export async function verifyDeletion(
     maxRetries = 5,
     baseDelay = 200,
     maxDelay = 1000,
-    backoffFactor = 1.5
+    backoffFactor = 1.5,
+    signal
   } = options;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
+    throwIfAborted(signal);
+
     const delay = Math.min(baseDelay * Math.pow(backoffFactor, attempt), maxDelay);
-    await new Promise(resolve => setTimeout(resolve, delay));
+    await waitForRetry(delay, signal);
     
     try {
       const isDeleted = await checkFunction();
@@ -71,6 +114,10 @@ export async function verifyDeletion(
         return true;
       }
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+
       // 如果检查函数抛出错误（比如404），可能意味着删除成功
       if (error instanceof Error && error.message.includes('不存在')) {
         return true;

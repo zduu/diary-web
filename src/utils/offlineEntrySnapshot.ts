@@ -1,4 +1,8 @@
 import type { DiaryEntry } from '../types/index.ts';
+import { getLocalStorageItem, removeLocalStorageItem, setLocalStorageItem } from './browserStorage.ts';
+import { isDiaryEntryArray } from './diaryEntryValidation.ts';
+import { sanitizeEntryHidden } from './entryTextValidation.ts';
+import { parseTimeString } from './timestampUtils.ts';
 
 const OFFLINE_ENTRY_SNAPSHOT_KEY = 'diary_offline_public_entries_v1';
 const MAX_OFFLINE_ENTRIES = 120;
@@ -15,23 +19,23 @@ function sanitizeEntry(entry: DiaryEntry): DiaryEntry {
   };
 }
 
-function isValidEntryArray(value: unknown): value is DiaryEntry[] {
-  return Array.isArray(value) && value.every((entry) => typeof entry === 'object' && entry !== null);
-}
-
 export function readOfflineEntrySnapshot(): OfflineEntrySnapshot | null {
   if (typeof window === 'undefined') {
     return null;
   }
 
   try {
-    const rawValue = window.localStorage.getItem(OFFLINE_ENTRY_SNAPSHOT_KEY);
+    const rawValue = getLocalStorageItem(OFFLINE_ENTRY_SNAPSHOT_KEY);
     if (!rawValue) {
       return null;
     }
 
     const parsedValue = JSON.parse(rawValue) as Partial<OfflineEntrySnapshot>;
-    if (!parsedValue.savedAt || !isValidEntryArray(parsedValue.entries)) {
+    if (
+      typeof parsedValue.savedAt !== 'string'
+      || parseTimeString(parsedValue.savedAt) === null
+      || !isDiaryEntryArray(parsedValue.entries)
+    ) {
       return null;
     }
 
@@ -51,7 +55,7 @@ export function writeOfflineEntrySnapshot(entries: DiaryEntry[]): void {
 
   try {
     const safeEntries = entries
-      .filter((entry) => !entry.hidden)
+      .filter((entry) => !sanitizeEntryHidden(entry.hidden))
       .slice(0, MAX_OFFLINE_ENTRIES)
       .map(sanitizeEntry);
 
@@ -60,7 +64,7 @@ export function writeOfflineEntrySnapshot(entries: DiaryEntry[]): void {
       entries: safeEntries,
     };
 
-    window.localStorage.setItem(OFFLINE_ENTRY_SNAPSHOT_KEY, JSON.stringify(payload));
+    setLocalStorageItem(OFFLINE_ENTRY_SNAPSHOT_KEY, JSON.stringify(payload));
   } catch {
     // Ignore storage quota or private-mode failures and keep online behavior unchanged.
   }
@@ -71,9 +75,5 @@ export function clearOfflineEntrySnapshot(): void {
     return;
   }
 
-  try {
-    window.localStorage.removeItem(OFFLINE_ENTRY_SNAPSHOT_KEY);
-  } catch {
-    // Ignore storage failures when clearing offline cache.
-  }
+  removeLocalStorageItem(OFFLINE_ENTRY_SNAPSHOT_KEY);
 }

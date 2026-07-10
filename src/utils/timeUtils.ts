@@ -1,5 +1,14 @@
 import { format, isToday, isYesterday, isThisWeek, isThisMonth, isThisYear } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+import {
+  normalizeTimeString,
+  parseTimeString,
+} from './timestampUtils.ts';
+
+export {
+  normalizeTimeString,
+  parseTimeString,
+};
 
 export interface TimeDisplay {
   relative: string;
@@ -7,28 +16,18 @@ export interface TimeDisplay {
   tooltip: string;
 }
 
-/**
- * 标准化时间字符串，确保正确处理数据库返回的时间格式
- * SQLite 的 CURRENT_TIMESTAMP 返回 UTC 时间，格式为 'YYYY-MM-DD HH:MM:SS'
- */
-export function normalizeTimeString(dateString: string): string {
-  if (!dateString) return dateString;
+const UNKNOWN_TIME_DISPLAY: TimeDisplay = {
+  relative: '时间未知',
+  absolute: '--:--',
+  tooltip: '未知时间',
+};
 
-  // 如果是 SQLite 的 DATETIME 格式 (YYYY-MM-DD HH:MM:SS)，需要添加 'Z' 表示 UTC
-  if (!dateString.includes('T') && !dateString.includes('Z') && !dateString.includes('+')) {
-    return dateString.replace(' ', 'T') + 'Z';
+export function getSmartTimeDisplay(dateString?: string | null): TimeDisplay {
+  const date = parseTimeString(dateString);
+  if (!date) {
+    return UNKNOWN_TIME_DISPLAY;
   }
 
-  // 如果是 ISO 格式但没有时区信息，添加 'Z' 表示 UTC
-  if (dateString.includes('T') && !dateString.includes('Z') && !dateString.includes('+')) {
-    return dateString + 'Z';
-  }
-
-  return dateString;
-}
-
-export function getSmartTimeDisplay(dateString: string): TimeDisplay {
-  const date = new Date(normalizeTimeString(dateString));
   const now = new Date();
   
   // 相对时间显示
@@ -74,8 +73,11 @@ export function getSmartTimeDisplay(dateString: string): TimeDisplay {
   };
 }
 
-export function formatTimelineDate(dateString: string): string {
-  const date = new Date(normalizeTimeString(dateString));
+export function formatTimelineDate(dateString?: string | null): string {
+  const date = parseTimeString(dateString);
+  if (!date) {
+    return '日期未知';
+  }
   
   if (isToday(date)) {
     return '今天';
@@ -95,7 +97,11 @@ export function formatTimelineDate(dateString: string): string {
 /**
  * 格式化完整的日期时间显示（包含具体时间）
  */
-export function formatFullDateTime(dateString: string): string {
-  const date = new Date(normalizeTimeString(dateString));
+export function formatFullDateTime(dateString?: string | null): string {
+  const date = parseTimeString(dateString);
+  if (!date) {
+    return '未知时间';
+  }
+
   return format(date, 'yyyy年MM月dd日 HH:mm', { locale: zhCN });
 }

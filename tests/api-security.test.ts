@@ -18,6 +18,8 @@ import {
   onRequestGet as getSettingByKey,
   onRequestPut as updateSetting,
 } from '../functions/api/settings/[key].ts';
+import { parseJsonBody } from '../functions/api/_shared.ts';
+import { parseTimeString } from '../src/utils/timestampUtils.ts';
 
 type EntryRow = {
   id: number;
@@ -130,7 +132,10 @@ class MockD1Database {
         .map((entry) => ({ created_at: entry.created_at }));
     }
 
-    if (normalized.startsWith('INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden')) {
+    if (
+      normalized.startsWith('INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden') &&
+      !normalized.startsWith('INSERT INTO diary_entries (entry_uuid, title, content, content_type, mood, weather, images, location, tags, hidden, created_at')
+    ) {
       const createdAt = new Date().toISOString();
       const newEntry: EntryRow = {
         id: this.getNextEntryId(),
@@ -411,7 +416,11 @@ class MockR2Bucket {
 }
 
 function sortEntriesDescending(left: EntryRow, right: EntryRow) {
-  return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
+  return getTestTimestamp(right.created_at) - getTestTimestamp(left.created_at);
+}
+
+function getTestTimestamp(value: string | null | undefined) {
+  return parseTimeString(value)?.getTime() ?? Number.NEGATIVE_INFINITY;
 }
 
 function createEnv(overrides?: {
@@ -453,6 +462,31 @@ function extractCookie(response: Response) {
   const rawCookie = response.headers.get('Set-Cookie');
   assert.ok(rawCookie, 'Expected Set-Cookie header');
   return rawCookie.split(';')[0];
+}
+
+function toBase64Url(value: string | Uint8Array): string {
+  const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : value;
+  let binary = '';
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+async function createSignedSessionCookie(payload: unknown, secret = 'local-dev-session-secret') {
+  const payloadBase64 = toBase64Url(JSON.stringify(payload));
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payloadBase64));
+
+  return `diary_session=${encodeURIComponent(`${payloadBase64}.${toBase64Url(new Uint8Array(signature))}`)}`;
 }
 
 function assertNoStoreHeaders(response: Response) {
@@ -706,6 +740,37 @@ test('tampered session cookie does not authenticate the request', async () => {
   const body = await parseJson<{ success: boolean; data: { isAuthenticated: boolean; isAdminAuthenticated: boolean } }>(sessionResponse);
   assert.equal(body.data.isAuthenticated, false);
   assert.equal(body.data.isAdminAuthenticated, false);
+});
+
+test('signed session cookies require a finite numeric expiration', async () => {
+  const env = createEnv({
+    settings: {
+      admin_password: 'admin-pass',
+      app_password_enabled: 'false',
+      quick_filters_enabled: 'true',
+      export_enabled: 'true',
+      archive_view_enabled: 'true',
+      welcome_page_enabled: 'true',
+    },
+  });
+
+  for (const malformedCookie of [
+    await createSignedSessionCookie({ role: 'admin' }),
+    await createSignedSessionCookie({ role: 'admin', exp: String(Date.now() + 60_000) }),
+    await createSignedSessionCookie({ role: 'admin', exp: Number.POSITIVE_INFINITY }),
+  ]) {
+    const sessionResponse = await getSession({
+      request: new Request('https://example.com/api/auth/session', {
+        headers: { Cookie: malformedCookie },
+      }),
+      env,
+    });
+
+    const body = await parseJson<{ success: boolean; data: { isAuthenticated: boolean; isAdminAuthenticated: boolean } }>(sessionResponse);
+    assert.equal(body.success, true);
+    assert.equal(body.data.isAuthenticated, false);
+    assert.equal(body.data.isAdminAuthenticated, false);
+  }
 });
 
 test('session token with extra segments is rejected', async () => {
@@ -1168,6 +1233,20 @@ test('stats endpoint ignores malformed created_at values instead of failing', as
         tags: '[]',
         hidden: 0,
       },
+      {
+        id: 3,
+        title: 'SQLite 日期',
+        content: 'sqlite timestamp',
+        content_type: 'markdown',
+        mood: 'neutral',
+        weather: 'sunny',
+        images: '[]',
+        location: null,
+        created_at: '2026-04-10 08:00:00',
+        updated_at: '2026-04-10 08:00:00',
+        tags: '[]',
+        hidden: 0,
+      },
     ],
   });
 
@@ -1185,12 +1264,16 @@ test('stats endpoint ignores malformed created_at values instead of failing', as
       total_entries: number;
       total_days_with_entries: number;
       consecutive_days: number;
+      latest_entry_date: string | null;
+      first_entry_date: string | null;
     };
   }>(response);
   assert.equal(body.success, true);
-  assert.equal(body.data.total_entries, 2);
-  assert.equal(body.data.total_days_with_entries, 1);
+  assert.equal(body.data.total_entries, 3);
+  assert.equal(body.data.total_days_with_entries, 2);
   assert.equal(Number.isInteger(body.data.consecutive_days), true);
+  assert.equal(body.data.latest_entry_date, '2026-04-10 08:00:00');
+  assert.equal(body.data.first_entry_date, '2026-04-09T08:00:00.000Z');
 });
 
 test('stats endpoint groups dates by configured application timezone', async () => {
@@ -1249,6 +1332,51 @@ test('stats endpoint groups dates by configured application timezone', async () 
   assert.equal(body.data.total_entries, 2);
   assert.equal(body.data.total_days_with_entries, 1);
   assert.equal(body.data.latest_entry_date, '2026-04-09T01:00:00.000Z');
+});
+
+test('stats endpoint falls back when APP_TIMEZONE is invalid', async () => {
+  const env = createEnv({
+    appTimeZone: 'Invalid/Timezone',
+    statsApiKey: 'stats-secret',
+    entries: [
+      {
+        id: 1,
+        title: '无效时区回退',
+        content: 'valid',
+        content_type: 'markdown',
+        mood: 'neutral',
+        weather: 'sunny',
+        images: '[]',
+        location: null,
+        created_at: '2026-04-09T01:00:00.000Z',
+        updated_at: '2026-04-09T01:00:00.000Z',
+        tags: '[]',
+        hidden: 0,
+      },
+    ],
+  });
+  const originalWarn = console.warn;
+  console.warn = () => {};
+
+  try {
+    const response = await getStats({
+      request: new Request('https://example.com/api/stats', {
+        headers: { 'X-API-Key': 'stats-secret' },
+      }),
+      env,
+    });
+    assert.equal(response.status, 200);
+
+    const body = await parseJson<{
+      success: boolean;
+      data: { total_entries: number; total_days_with_entries: number };
+    }>(response);
+    assert.equal(body.success, true);
+    assert.equal(body.data.total_entries, 1);
+    assert.equal(body.data.total_days_with_entries, 1);
+  } finally {
+    console.warn = originalWarn;
+  }
 });
 
 test('authenticated app session gets 403 on admin-only endpoints', async () => {
@@ -1507,6 +1635,20 @@ test('write endpoints require admin session and allow create update delete after
   assert.equal(createdBody.success, true);
   assert.equal(createdBody.data.hidden, true);
 
+  const invalidIdUpdate = await updateEntry({
+    params: { id: '1abc' },
+    request: new Request('https://example.com/api/entries/1abc', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({ title: '不应更新' }),
+    }),
+    env,
+  });
+  assert.equal(invalidIdUpdate.status, 400);
+
   const updateResponse = await updateEntry({
     params: { id: '1' },
     request: new Request('https://example.com/api/entries/1', {
@@ -1726,6 +1868,90 @@ test('entry write endpoints reject invalid structured payloads with 400 response
   });
   assert.equal(invalidUpdate.status, 400);
 
+  const invalidImageUrl = await createEntry({
+    request: new Request('https://example.com/api/entries', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        title: '图片地址异常',
+        content: 'valid-content',
+        images: ['javascript:alert(1)'],
+      }),
+    }),
+    env,
+  });
+  assert.equal(invalidImageUrl.status, 400);
+
+  const invalidLocation = await createEntry({
+    request: new Request('https://example.com/api/entries', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        title: '位置异常',
+        content: 'valid-content',
+        location: {
+          name: '越界位置',
+          latitude: 91,
+          longitude: 121.4,
+        },
+      }),
+    }),
+    env,
+  });
+  assert.equal(invalidLocation.status, 400);
+
+  const invalidPoiDistance = await createEntry({
+    request: new Request('https://example.com/api/entries', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        title: 'POI异常',
+        content: 'valid-content',
+        location: {
+          name: '附近',
+          nearbyPOIs: [
+            { name: '公园', type: 'park', distance: -1 },
+          ],
+        },
+      }),
+    }),
+    env,
+  });
+  assert.equal(invalidPoiDistance.status, 400);
+
+  const invalidHighAccuracyMeta = await createEntry({
+    request: new Request('https://example.com/api/entries', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        title: '高精度异常',
+        content: 'valid-content',
+        location: {
+          name: '定位',
+          highAccuracy: {
+            accuracy: 20,
+            confidence: 'high',
+            attempts: 0,
+          },
+        },
+      }),
+    }),
+    env,
+  });
+  assert.equal(invalidHighAccuracyMeta.status, 400);
+
   const overlongTitle = await createEntry({
     request: new Request('https://example.com/api/entries', {
       method: 'POST',
@@ -1798,7 +2024,7 @@ test('batch import requires admin and overwrite clears existing entries', async 
             location: null,
             tags: ['导入'],
             hidden: false,
-            created_at: '2026-04-03T08:00:00.000Z',
+            created_at: '2026-04-03 08:00:00',
           },
         ],
         options: { overwrite: true },
@@ -1811,6 +2037,7 @@ test('batch import requires admin and overwrite clears existing entries', async 
   const db = env.DB as unknown as MockD1Database;
   assert.equal(db.entries.length, 1);
   assert.equal(db.entries[0].title, '导入内容');
+  assert.equal(db.entries[0].created_at, '2026-04-03 08:00:00');
 });
 
 test('batch endpoints reject invalid payloads before writing data', async () => {
@@ -2347,6 +2574,23 @@ test('settings updates reject invalid values with 400 responses', async () => {
     env,
   });
   assert.equal(nonStringValue.status, 400);
+
+  const shortSyncToken = await updateSetting({
+    params: { key: 'sync_access_token' },
+    request: new Request('https://example.com/api/settings/sync_access_token', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({ value: 'short' }),
+    }),
+    env,
+  });
+  assert.equal(shortSyncToken.status, 400);
+  const shortSyncTokenPayload = await parseJson<{ success: boolean; error: string }>(shortSyncToken);
+  assert.equal(shortSyncTokenPayload.success, false);
+  assert.match(shortSyncTokenPayload.error, /同步令牌长度至少/);
 });
 
 test('deleting password settings clears both hash and legacy keys', async () => {
@@ -2502,6 +2746,16 @@ test('json endpoints require application/json content type', async () => {
     },
   });
 
+  const loginWithCharset = await login({
+    request: new Request('https://example.com/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'Application/JSON; charset=UTF-8' },
+      body: JSON.stringify({ scope: 'admin', password: 'admin-pass' }),
+    }),
+    env,
+  });
+  assert.equal(loginWithCharset.status, 200);
+
   const loginWrongType = await login({
     request: new Request('https://example.com/api/auth/login', {
       method: 'POST',
@@ -2511,6 +2765,16 @@ test('json endpoints require application/json content type', async () => {
     env,
   });
   assert.equal(loginWrongType.status, 415);
+
+  const loginDisguisedType = await login({
+    request: new Request('https://example.com/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain; application/json' },
+      body: JSON.stringify({ scope: 'admin', password: 'admin-pass' }),
+    }),
+    env,
+  });
+  assert.equal(loginDisguisedType.status, 415);
 
   const adminCookie = await loginAsAdmin(env);
 
@@ -2540,6 +2804,29 @@ test('json endpoints require application/json content type', async () => {
     env,
   });
   assert.equal(settingWrongType.status, 415);
+});
+
+test('json body parsing rejects oversized content-length before reading body', async () => {
+  let textCalled = false;
+  const request = {
+    headers: new Headers({
+      'Content-Type': 'application/json',
+      'Content-Length': '1024',
+    }),
+    async text() {
+      textCalled = true;
+      return '{"ok":true}';
+    },
+  } as Request;
+
+  const result = await parseJsonBody(request, {
+    requireJsonContentType: true,
+    maxBodyBytes: 100,
+  });
+
+  assert.equal(result.status, 413);
+  assert.match(result.error ?? '', /请求体超过大小限制/);
+  assert.equal(textCalled, false);
 });
 
 test('json endpoints reject oversized payloads with 413', async () => {

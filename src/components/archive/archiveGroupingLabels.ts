@@ -32,6 +32,33 @@ function getArchiveWeekRangeLabel(date: Date) {
   return `${startOfWeek.getMonth() + 1}月${startOfWeek.getDate()}日-${endOfWeek.getMonth() + 1}月${endOfWeek.getDate()}日`;
 }
 
+function parseArchiveYearKey(key: string) {
+  if (!/^\d{4}$/.test(key)) {
+    return null;
+  }
+
+  const year = Number(key);
+  return Number.isFinite(year) ? year : null;
+}
+
+function parseArchiveMonthKey(key: string) {
+  const [yearStr, monthStr] = key.split('-');
+  if (!yearStr || !monthStr || !/^\d{4}$/.test(yearStr) || !/^\d{1,2}$/.test(monthStr)) {
+    return null;
+  }
+
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  if (!Number.isFinite(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    return null;
+  }
+
+  return {
+    year,
+    monthIndex: month - 1,
+  };
+}
+
 export function getArchiveTimeLabel(
   date: Date,
   groupBy: ArchiveGroupBy,
@@ -59,7 +86,11 @@ function getNaturalArchiveTimeLabel(date: Date, groupBy: ArchiveGroupBy, key: st
   const currentMonth = now.getMonth();
 
   if (groupBy === 'year') {
-    const year = parseInt(key, 10);
+    const year = parseArchiveYearKey(key);
+    if (year === null) {
+      return `${date.getFullYear()}年`;
+    }
+
     if (year === currentYear) return '今年';
     if (year === currentYear - 1) return '去年';
     if (year === currentYear - 2) return '前年';
@@ -67,9 +98,12 @@ function getNaturalArchiveTimeLabel(date: Date, groupBy: ArchiveGroupBy, key: st
   }
 
   if (groupBy === 'month') {
-    const [yearStr, monthStr] = key.split('-');
-    const year = parseInt(yearStr, 10);
-    const month = parseInt(monthStr, 10) - 1;
+    const parsedKey = parseArchiveMonthKey(key);
+    if (!parsedKey) {
+      return getArchiveMonthLabel(date);
+    }
+
+    const { year, monthIndex: month } = parsedKey;
 
     if (year === currentYear && month === currentMonth) return '本月';
     if (year === currentYear && month === currentMonth - 1) return '上个月';

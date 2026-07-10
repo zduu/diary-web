@@ -1,6 +1,7 @@
-import { debugLog, debugWarn } from '../../utils/logger.ts';
+import { debugError, debugLog, debugWarn } from '../../utils/logger.ts';
+import type { AMapMapLike, AMapMarkerSdk, AMapOverlay } from './amapTypes';
 
-function removeOverlaySafely(map: any, overlay: any) {
+function removeOverlaySafely(map: AMapMapLike, overlay: AMapOverlay | null) {
   if (!overlay) {
     return;
   }
@@ -33,12 +34,12 @@ export function replaceUserLocationMarker({
   lng,
   lat,
 }: {
-  AMap: any;
-  map: any;
-  existingMarker: any;
+  AMap: AMapMarkerSdk;
+  map: AMapMapLike;
+  existingMarker: AMapOverlay | null;
   lng: number;
   lat: number;
-}) {
+}): AMapOverlay | null {
   removeOverlaySafely(map, existingMarker);
 
   try {
@@ -50,7 +51,7 @@ export function replaceUserLocationMarker({
     map.add(simpleMarker);
     return simpleMarker;
   } catch (simpleError) {
-    console.error('🗺️ 简单标记失败:', simpleError);
+    debugError('🗺️ 简单标记失败:', simpleError);
   }
 
   try {
@@ -98,7 +99,7 @@ export function replaceUserLocationMarker({
     map.add(userMarker);
     return userMarker;
   } catch (error) {
-    console.error('🗺️ 添加用户位置标记失败:', error);
+    debugError('🗺️ 添加用户位置标记失败:', error);
   }
 
   try {
@@ -124,7 +125,7 @@ export function replaceUserLocationMarker({
     debugLog('🗺️ 使用SVG标记成功');
     return userMarker;
   } catch (svgError) {
-    console.error('🗺️ SVG标记失败:', svgError);
+    debugError('🗺️ SVG标记失败:', svgError);
   }
 
   try {
@@ -142,7 +143,7 @@ export function replaceUserLocationMarker({
     debugLog('🗺️ 使用备用圆形标记成功');
     return circle;
   } catch (circleError) {
-    console.error('🗺️ 所有标记方案都失败:', circleError);
+    debugError('🗺️ 所有标记方案都失败:', circleError);
     return null;
   }
 }
@@ -154,12 +155,12 @@ export function replaceSelectionMarker({
   lng,
   lat,
 }: {
-  AMap: any;
-  map: any;
-  existingMarker: any;
+  AMap: AMapMarkerSdk;
+  map: AMapMapLike;
+  existingMarker: AMapOverlay | null;
   lng: number;
   lat: number;
-}) {
+}): AMapOverlay | null {
   removeOverlaySafely(map, existingMarker);
 
   try {
@@ -196,7 +197,7 @@ export function replaceSelectionMarker({
     debugLog('🗺️ 红色选择位置标记添加成功');
     return redMarker;
   } catch (simpleError) {
-    console.error('🗺️ 红色标记失败:', simpleError);
+    debugError('🗺️ 红色标记失败:', simpleError);
   }
 
   try {
@@ -251,7 +252,7 @@ export function replaceSelectionMarker({
     debugLog('🗺️ 选择位置标记添加成功');
     return marker;
   } catch (error) {
-    console.error('🗺️ 添加选择位置标记失败:', error);
+    debugError('🗺️ 添加选择位置标记失败:', error);
   }
 
   try {
@@ -271,7 +272,7 @@ export function replaceSelectionMarker({
     debugLog('🗺️ 使用默认红色标记成功');
     return marker;
   } catch (defaultError) {
-    console.error('🗺️ 默认标记也失败:', defaultError);
+    debugError('🗺️ 默认标记也失败:', defaultError);
     return null;
   }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type InstallPromptOutcome = 'accepted' | 'dismissed' | 'unavailable';
 
@@ -51,8 +51,13 @@ export function getManualInstallHint(deviceInfo: InstallDeviceInfo, isStandalone
 export function useInstallPrompt(isStandalone: boolean) {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [lastOutcome, setLastOutcome] = useState<'accepted' | 'dismissed' | null>(null);
+  const promptInProgressRef = useRef(false);
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
     const handleBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
       setInstallEvent(event as BeforeInstallPromptEvent);
@@ -73,20 +78,29 @@ export function useInstallPrompt(isStandalone: boolean) {
     };
   }, []);
 
+  useEffect(() => {
+    if (isStandalone) {
+      setInstallEvent(null);
+    }
+  }, [isStandalone]);
+
   const promptInstall = async (): Promise<InstallPromptOutcome> => {
-    if (!installEvent || isStandalone) {
+    if (!installEvent || isStandalone || promptInProgressRef.current) {
       return 'unavailable';
     }
+
+    promptInProgressRef.current = true;
+    setInstallEvent(null);
 
     try {
       await installEvent.prompt();
       const { outcome } = await installEvent.userChoice;
       setLastOutcome(outcome);
-      setInstallEvent(null);
       return outcome;
     } catch {
-      setInstallEvent(null);
       return 'unavailable';
+    } finally {
+      promptInProgressRef.current = false;
     }
   };
 

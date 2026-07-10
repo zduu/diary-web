@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { getLocalStorageItem, setLocalStorageItem } from '../utils/browserStorage.ts';
+import { syncSystemBarsWithTheme } from '../utils/systemBars.ts';
 
 export type ThemeMode = 'light' | 'paper' | 'dark';
 
@@ -92,7 +94,7 @@ function normalizeThemeMode(savedValue: string | null): ThemeMode {
 export function useTheme() {
   const [currentTheme, setCurrentTheme] = useState<ThemeMode>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('diary-theme');
+      const saved = getLocalStorageItem('diary-theme');
       return normalizeThemeMode(saved);
     }
     return 'light';
@@ -115,15 +117,17 @@ export function useTheme() {
     root.classList.add(themeClass);
     document.body.classList.add(themeClass);
     root.style.colorScheme = mode === 'dark' ? 'dark' : 'light';
+    // public/theme-init.js 在首屏前设置了内联背景，这里保持它与当前主题一致
+    root.style.backgroundColor = themeConfig.colors.background;
 
     const themeColor = mode === 'dark' ? '#111827' : mode === 'paper' ? '#f3eee2' : '#f9fafb';
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor);
+    syncSystemBarsWithTheme(mode === 'dark');
   };
 
   const setTheme = (mode: ThemeMode) => {
     setCurrentTheme(mode);
-    localStorage.setItem('diary-theme', mode);
-    applyTheme(mode);
+    setLocalStorageItem('diary-theme', mode);
   };
 
   useEffect(() => {

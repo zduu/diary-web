@@ -6,6 +6,16 @@ import { useThemeContext } from './ThemeProvider';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { useIsMobile } from '../hooks/useIsMobile';
 import type { ThemeConfig } from '../hooks/useTheme';
+import {
+  MAX_ENTRY_CONTENT_LENGTH,
+  MAX_ENTRY_MOOD_LENGTH,
+  MAX_ENTRY_TAG_LENGTH,
+  MAX_ENTRY_TAGS_COUNT,
+  MAX_ENTRY_TITLE_LENGTH,
+  MAX_ENTRY_WEATHER_LENGTH,
+  sanitizeEntryContentType,
+} from '../utils/entryTextValidation.ts';
+import { getRenderableEntryImages } from './entry/entryImages';
 
 const MarkdownEditor = lazy(() =>
   import('./MarkdownEditor').then((module) => ({ default: module.MarkdownEditor }))
@@ -38,6 +48,7 @@ type DiaryFormSelectWithCustomFieldProps = {
   showCustom: boolean;
   customValue: string;
   customPlaceholder: string;
+  customMaxLength?: number;
   onSelectChange: (value: string) => void;
   onCustomChange: (value: string) => void;
   theme: ThemeConfig;
@@ -93,6 +104,33 @@ function createEmptySnapshot(): DiaryFormSnapshot {
   };
 }
 
+function sanitizeFormTags(value: string[]): string[] {
+  const nextTags: string[] = [];
+
+  for (const item of value) {
+    const tag = item.trim();
+    if (!tag || tag.length > MAX_ENTRY_TAG_LENGTH || nextTags.includes(tag)) {
+      continue;
+    }
+
+    if (nextTags.length >= MAX_ENTRY_TAGS_COUNT) {
+      break;
+    }
+
+    nextTags.push(tag);
+  }
+
+  return nextTags;
+}
+
+function clampText(value: string, maxLength: number): string {
+  return value.length > maxLength ? value.slice(0, maxLength) : value;
+}
+
+function resolveSubmittedText(value: string, fallbackValue: string, maxLength: number): string {
+  return clampText(value.trim() || fallbackValue, maxLength);
+}
+
 function getFormControlStyle(theme: ThemeConfig): CSSProperties {
   return {
     backgroundColor: theme.colors.surface,
@@ -124,8 +162,8 @@ function isPresetOption(options: DiaryFormOption<string>[], value: string) {
   return options.some((option) => option.value === value);
 }
 
-function resolveSelectableField(options: DiaryFormOption<string>[], value: string, fallbackValue: string) {
-  const normalizedValue = value || fallbackValue;
+function resolveSelectableField(options: DiaryFormOption<string>[], value: string, fallbackValue: string, maxLength: number) {
+  const normalizedValue = clampText(value || fallbackValue, maxLength);
 
   if (isPresetOption(options, normalizedValue)) {
     return {
@@ -141,25 +179,25 @@ function resolveSelectableField(options: DiaryFormOption<string>[], value: strin
 }
 
 function createSnapshotFromEntry(entry: DiaryEntry): DiaryFormSnapshot {
-  const moodState = resolveSelectableField(moods, entry.mood || 'neutral', 'neutral');
-  const weatherState = resolveSelectableField(weathers, entry.weather || 'unknown', 'unknown');
+  const moodState = resolveSelectableField(moods, entry.mood || 'neutral', 'neutral', MAX_ENTRY_MOOD_LENGTH);
+  const weatherState = resolveSelectableField(weathers, entry.weather || 'unknown', 'unknown', MAX_ENTRY_WEATHER_LENGTH);
 
   return {
-    title: entry.title,
-    content: entry.content,
-    contentType: (entry.content_type as 'markdown' | 'plain') || 'markdown',
+    title: clampText(entry.title || '', MAX_ENTRY_TITLE_LENGTH),
+    content: clampText(entry.content || '', MAX_ENTRY_CONTENT_LENGTH),
+    contentType: sanitizeEntryContentType(entry.content_type),
     mood: moodState.value,
     weather: weatherState.value,
     customMood: moodState.customValue,
     customWeather: weatherState.customValue,
-    images: entry.images || [],
+    images: getRenderableEntryImages(entry.images),
     location: entry.location || null,
-    tags: entry.tags || [],
+    tags: sanitizeFormTags(entry.tags || []),
   };
 }
 
-function resolveSubmittedValue(value: string, customValue: string) {
-  return value === 'custom' ? customValue.trim() : value;
+function resolveSubmittedValue(value: string, customValue: string, maxLength: number) {
+  return clampText(value === 'custom' ? customValue.trim() : value, maxLength);
 }
 
 function DiaryFormSelectWithCustomField({
@@ -170,6 +208,7 @@ function DiaryFormSelectWithCustomField({
   showCustom,
   customValue,
   customPlaceholder,
+  customMaxLength,
   onSelectChange,
   onCustomChange,
   theme,
@@ -205,6 +244,7 @@ function DiaryFormSelectWithCustomField({
           <input
             type="text"
             value={customValue}
+            maxLength={customMaxLength}
             autoComplete="off"
             onChange={(event) => onCustomChange(event.target.value)}
             placeholder={customPlaceholder}
@@ -221,6 +261,8 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
   const { theme } = useThemeContext();
   const titleInputRef = React.useRef<HTMLInputElement>(null);
   const formRef = React.useRef<HTMLFormElement>(null);
+  const focusContentTimeoutRef = React.useRef<number | null>(null);
+  const focusContentFrameRef = React.useRef<number | null>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [contentType, setContentType] = useState<'markdown' | 'plain'>('markdown');
@@ -270,6 +312,28 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
 
   useBodyScrollLock(isOpen);
 
+  const clearPendingContentFocus = React.useCallback(() => {
+    if (focusContentTimeoutRef.current !== null) {
+      window.clearTimeout(focusContentTimeoutRef.current);
+      focusContentTimeoutRef.current = null;
+    }
+
+    if (focusContentFrameRef.current !== null) {
+      window.cancelAnimationFrame(focusContentFrameRef.current);
+      focusContentFrameRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      clearPendingContentFocus();
+    }
+  }, [clearPendingContentFocus, isOpen]);
+
+  useEffect(() => () => {
+    clearPendingContentFocus();
+  }, [clearPendingContentFocus]);
+
   const handleClose = () => {
     if (loading) {
       return;
@@ -285,14 +349,14 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
     setLoading(true);
     try {
       await onSave({
-        title: title.trim() || '无标题',
-        content: content.trim(),
+        title: resolveSubmittedText(title, '无标题', MAX_ENTRY_TITLE_LENGTH),
+        content: resolveSubmittedText(content, '', MAX_ENTRY_CONTENT_LENGTH),
         content_type: contentType,
-        mood: resolveSubmittedValue(mood, customMood),
-        weather: resolveSubmittedValue(weather, customWeather),
-        images,
+        mood: resolveSubmittedValue(mood, customMood, MAX_ENTRY_MOOD_LENGTH),
+        weather: resolveSubmittedValue(weather, customWeather, MAX_ENTRY_WEATHER_LENGTH),
+        images: getRenderableEntryImages(images),
         location,
-        tags,
+        tags: sanitizeFormTags(tags),
       });
     } finally {
       setLoading(false);
@@ -301,7 +365,7 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
 
   const addTag = () => {
     const tag = tagInput.trim();
-    if (tag && !tags.includes(tag)) {
+    if (tag && tag.length <= MAX_ENTRY_TAG_LENGTH && tags.length < MAX_ENTRY_TAGS_COUNT && !tags.includes(tag)) {
       setTags([...tags, tag]);
       setTagInput('');
     }
@@ -337,6 +401,8 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
   };
 
   const focusContentInput = () => {
+    clearPendingContentFocus();
+
     const tryFocus = (attempt = 0) => {
       const contentInput = formRef.current?.querySelector<HTMLTextAreaElement>('textarea[data-diary-content-input="true"]');
 
@@ -344,15 +410,17 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
         contentInput.focus();
         const cursorPosition = contentInput.value.length;
         contentInput.setSelectionRange(cursorPosition, cursorPosition);
+        focusContentTimeoutRef.current = null;
         return;
       }
 
       if (attempt < 4) {
-        window.setTimeout(() => tryFocus(attempt + 1), 60);
+        focusContentTimeoutRef.current = window.setTimeout(() => tryFocus(attempt + 1), 60);
       }
     };
 
-    window.requestAnimationFrame(() => {
+    focusContentFrameRef.current = window.requestAnimationFrame(() => {
+      focusContentFrameRef.current = null;
       tryFocus();
     });
   };
@@ -423,6 +491,7 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
               ref={titleInputRef}
               type="text"
               value={title}
+              maxLength={MAX_ENTRY_TITLE_LENGTH}
               autoComplete="off"
               enterKeyHint="next"
               onChange={(e) => setTitle(e.target.value)}
@@ -493,6 +562,7 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
                 <MarkdownEditor
                   key={`markdown-editor-${entry?.id || 'new'}`}
                   value={content}
+                  maxLength={MAX_ENTRY_CONTENT_LENGTH}
                   onChange={setContent}
                   placeholder={isMobile ? '使用 Markdown 记录想法...' : '使用 Markdown 语法记录你的想法和感受...'}
                 />
@@ -501,6 +571,7 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
               <textarea
                 data-diary-content-input="true"
                 value={content}
+                maxLength={MAX_ENTRY_CONTENT_LENGTH}
                 onChange={(e) => setContent(e.target.value)}
                 enterKeyHint={isMobile ? 'done' : undefined}
                 rows={isMobile ? 16 : 12}
@@ -562,6 +633,7 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
                   showCustom={showCustomMood}
                   customValue={customMood}
                   customPlaceholder="输入自定义心情..."
+                  customMaxLength={MAX_ENTRY_MOOD_LENGTH}
                   onSelectChange={handleMoodChange}
                   onCustomChange={setCustomMood}
                   theme={theme}
@@ -576,6 +648,7 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
                   showCustom={showCustomWeather}
                   customValue={customWeather}
                   customPlaceholder="输入自定义天气..."
+                  customMaxLength={MAX_ENTRY_WEATHER_LENGTH}
                   onSelectChange={handleWeatherChange}
                   onCustomChange={setCustomWeather}
                   theme={theme}
@@ -595,6 +668,7 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
                   <input
                     type="text"
                     value={tagInput}
+                    maxLength={MAX_ENTRY_TAG_LENGTH}
                     autoComplete="off"
                     enterKeyHint="done"
                     onChange={(e) => setTagInput(e.target.value)}
@@ -606,10 +680,12 @@ export function DiaryForm({ entry, onSave, onCancel, isOpen }: DiaryFormProps) {
                   <button
                     type="button"
                     onClick={addTag}
+                    disabled={tags.length >= MAX_ENTRY_TAGS_COUNT}
                     className={`${isMobile ? 'px-3 py-2' : 'px-4 py-2'} rounded-md transition-colors`}
                     style={{
                       backgroundColor: theme.colors.primary,
-                      color: 'white'
+                      color: 'white',
+                      opacity: tags.length >= MAX_ENTRY_TAGS_COUNT ? 0.6 : 1,
                     }}
                   >
                     {isMobile ? '+' : '添加'}

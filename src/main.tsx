@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 import { useStandaloneMode } from './hooks/useStandaloneMode.ts'
+import { getSessionStorageItem, removeSessionStorageItem, setSessionStorageItem } from './utils/browserStorage.ts'
+import { parseStoredScrollY } from './utils/scrollRestoration.ts'
 
 const STANDALONE_SCROLL_KEY = 'diary_scroll_y'
 
@@ -53,30 +55,37 @@ function Root() {
 
   React.useEffect(() => {
     if (!isStandalone) {
-      sessionStorage.removeItem(STANDALONE_SCROLL_KEY)
+      removeSessionStorageItem(STANDALONE_SCROLL_KEY)
       return
     }
 
+    let restoreFrameId: number | null = null
+
     const restoreScroll = () => {
-      const savedScroll = sessionStorage.getItem(STANDALONE_SCROLL_KEY)
+      const savedScroll = getSessionStorageItem(STANDALONE_SCROLL_KEY)
 
       if (!savedScroll) {
         return
       }
 
-      const parsedScroll = Number(savedScroll)
+      const parsedScroll = parseStoredScrollY(savedScroll)
 
-      if (!Number.isFinite(parsedScroll)) {
+      if (parsedScroll === null) {
         return
       }
 
-      window.requestAnimationFrame(() => {
+      if (restoreFrameId !== null) {
+        window.cancelAnimationFrame(restoreFrameId)
+      }
+
+      restoreFrameId = window.requestAnimationFrame(() => {
         window.scrollTo({ top: parsedScroll, behavior: 'auto' })
+        restoreFrameId = null
       })
     }
 
     const saveScroll = () => {
-      sessionStorage.setItem(STANDALONE_SCROLL_KEY, String(window.scrollY))
+      setSessionStorageItem(STANDALONE_SCROLL_KEY, String(window.scrollY))
     }
 
     const handleVisibilityChange = () => {
@@ -97,6 +106,9 @@ function Root() {
       window.removeEventListener('pagehide', saveScroll)
       window.removeEventListener('pageshow', restoreScroll)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (restoreFrameId !== null) {
+        window.cancelAnimationFrame(restoreFrameId)
+      }
     }
   }, [isStandalone])
 

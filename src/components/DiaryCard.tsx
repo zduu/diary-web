@@ -20,6 +20,17 @@ import {
   EntryTitleBlock,
 } from './entry/entryDisplay';
 import { buildHighlightedExcerpt, highlightText } from '../utils/searchHighlight.tsx';
+import { getDiaryEntryDomId, hasPersistedDiaryEntryId } from '../utils/diaryEntryIdentity.ts';
+import {
+  sanitizeEntryContent,
+  sanitizeEntryContentType,
+  sanitizeEntryHidden,
+  sanitizeEntryMood,
+  sanitizeEntryTags,
+  sanitizeEntryTitle,
+  sanitizeEntryWeather,
+} from '../utils/entryTextValidation.ts';
+import { getRenderableEntryImages } from './entry/entryImages';
 import {
   getEntryMoodEmoji,
   getEntryMoodLabel,
@@ -47,18 +58,25 @@ export function DiaryCard({ entry, onEdit, onPreview, searchQuery = '', isHighli
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [locationDetailOpen, setLocationDetailOpen] = useState(false);
 
-  const mood = entry.mood || 'neutral';
-  const weather = entry.weather || 'unknown';
-  const timeDisplay = getSmartTimeDisplay(entry.created_at!);
-  const preview = createEntryPreview(entry.content);
-  const highlightedExcerpt = buildHighlightedExcerpt(entry.content, searchQuery);
+  const mood = sanitizeEntryMood(entry.mood);
+  const weather = sanitizeEntryWeather(entry.weather);
+  const contentType = sanitizeEntryContentType(entry.content_type);
+  const isHidden = sanitizeEntryHidden(entry.hidden);
+  const entryTitle = sanitizeEntryTitle(entry.title, '未命名日记');
+  const entryContent = sanitizeEntryContent(entry.content);
+  const timeDisplay = getSmartTimeDisplay(entry.created_at);
+  const preview = createEntryPreview(entryContent);
+  const highlightedExcerpt = buildHighlightedExcerpt(entryContent, searchQuery);
+  const renderableImages = getRenderableEntryImages(entry.images);
+  const entryTags = sanitizeEntryTags(entry.tags);
   const hasLongContent = preview.length > 160;
-  const hasMoreImages = (entry.images?.length || 0) > 2;
-  const hasMoreTags = (entry.tags?.length || 0) > 4;
+  const hasMoreImages = renderableImages.length > 2;
+  const hasMoreTags = entryTags.length > 4;
   const canExpand = isMobile && (hasLongContent || hasMoreImages || hasMoreTags || Boolean(entry.location));
   const compactMode = isMobile && canExpand && !isExpanded;
-  const visibleTags = compactMode ? entry.tags?.slice(0, 3) : entry.tags;
-  const visibleImages = compactMode ? entry.images?.slice(0, 2) : entry.images;
+  const visibleTags = compactMode ? entryTags.slice(0, 3) : entryTags;
+  const visibleImages = compactMode ? renderableImages.slice(0, 2) : renderableImages;
+  const canEdit = Boolean(onEdit && isAdminAuthenticated && hasPersistedDiaryEntryId(entry));
 
   const cardStyle: CSSProperties = {
     backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
@@ -77,8 +95,8 @@ export function DiaryCard({ entry, onEdit, onPreview, searchQuery = '', isHighli
 
   return (
     <article
-      id={entry.id ? `entry-${entry.id}` : undefined}
-      className={`diary-card rounded-[1.6rem] p-5 transition-shadow transition-colors duration-300 md:p-6 ${entry.content_type === 'markdown' ? 'rich-content-entry' : ''} ${isHighlighted ? 'ring-highlight' : ''}`}
+      id={getDiaryEntryDomId(entry)}
+      className={`diary-card rounded-[1.6rem] p-5 transition-shadow transition-colors duration-300 md:p-6 ${contentType === 'markdown' ? 'rich-content-entry' : ''} ${isHighlighted ? 'ring-highlight' : ''}`}
       style={cardStyle}
       onClick={() => onPreview?.(entry)}
     >
@@ -96,7 +114,7 @@ export function DiaryCard({ entry, onEdit, onPreview, searchQuery = '', isHighli
             <EntryMetaPill theme={theme}>
               {getEntryWeatherLabel(weather)}
             </EntryMetaPill>
-            {entry.hidden && (
+            {isHidden && (
               <EntryMetaPill
                 theme={theme}
                 style={{
@@ -112,8 +130,8 @@ export function DiaryCard({ entry, onEdit, onPreview, searchQuery = '', isHighli
 
           <EntryTitleBlock
             theme={theme}
-            title={highlightText(entry.title && entry.title !== '无标题' ? entry.title : '未命名日记', searchQuery)}
-            subtitle={<>记录于 {formatFullDateTime(entry.created_at!)}</>}
+            title={highlightText(entryTitle === '无标题' ? '未命名日记' : entryTitle, searchQuery)}
+            subtitle={<>记录于 {formatFullDateTime(entry.created_at)}</>}
             isMobile={isMobile}
           />
 
@@ -124,11 +142,11 @@ export function DiaryCard({ entry, onEdit, onPreview, searchQuery = '', isHighli
           )}
         </div>
 
-        {onEdit && isAdminAuthenticated && (
+        {canEdit && (
           <button
             onClick={(event) => {
               event.stopPropagation();
-              onEdit(entry);
+              onEdit?.(entry);
             }}
             className="quiet-button rounded-xl p-2.5 transition-transform duration-200 hover:-translate-y-0.5"
             style={{
@@ -146,13 +164,13 @@ export function DiaryCard({ entry, onEdit, onPreview, searchQuery = '', isHighli
       <div className="mb-5">
         {compactMode ? (
           <p className="text-[15px] leading-8 md:text-base" style={{ color: theme.colors.text }}>
-            {getEntryPreview(entry.content, 160)}
+            {getEntryPreview(entryContent, 160)}
           </p>
-        ) : entry.content_type === 'markdown' ? (
-          <LazyMarkdownRenderer content={entry.content} />
+        ) : contentType === 'markdown' ? (
+          <LazyMarkdownRenderer content={entryContent} />
         ) : (
           <p className="whitespace-pre-wrap text-[15px] leading-8 md:text-base" style={{ color: theme.colors.text }}>
-            {entry.content}
+            {entryContent}
           </p>
         )}
       </div>
@@ -174,7 +192,7 @@ export function DiaryCard({ entry, onEdit, onPreview, searchQuery = '', isHighli
             theme={theme}
             tags={visibleTags}
             isMobile={isMobile}
-            extraCount={compactMode && hasMoreTags ? (entry.tags?.length || 0) - (visibleTags?.length || 0) : 0}
+            extraCount={compactMode && hasMoreTags ? entryTags.length - visibleTags.length : 0}
           />
         </div>
       )}
@@ -211,10 +229,10 @@ export function DiaryCard({ entry, onEdit, onPreview, searchQuery = '', isHighli
         )}
       </div>
 
-      {entry.images && entry.images.length > 0 && imageViewerOpen && (
+      {renderableImages.length > 0 && imageViewerOpen && (
         <Suspense fallback={null}>
           <ImageViewer
-            images={entry.images}
+            images={renderableImages}
             initialIndex={selectedImageIndex}
             isOpen={imageViewerOpen}
             onClose={() => setImageViewerOpen(false)}

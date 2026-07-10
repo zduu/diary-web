@@ -83,7 +83,6 @@ export function WelcomePage({
 
   const opacity = isBackground ? 1 : isTransitioningToApp ? 0.3 : 1;
   const transform = isBackground ? 'scale(1)' : isTransitioningToApp ? 'scale(0.985)' : 'scale(1)';
-  const filter = isBackground ? 'none' : isTransitioningToApp ? 'blur(2px)' : 'none';
 
   return (
     <div
@@ -93,12 +92,9 @@ export function WelcomePage({
         backgroundColor: theme.colors.background,
         opacity,
         transform,
-        filter,
-        transition: 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+        transition: 'opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
       }}
     >
-      {!isMobile && <div className="subtle-grid" />}
-
       <div
         className="pointer-events-none absolute inset-0"
         style={{

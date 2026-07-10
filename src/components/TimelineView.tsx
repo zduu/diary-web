@@ -51,10 +51,16 @@ export function TimelineView({ entries, onEdit, onPreview, searchQuery = '', hig
     () => timelineItems.filter((item) => item.type === 'date'),
     [timelineItems]
   );
+  const orderedEntries = useMemo(
+    () => timelineItems
+      .filter((item) => item.type === 'entry')
+      .map((item) => item.data),
+    [timelineItems]
+  );
   const activeDateAnchor = useActiveTimelineDateAnchor(dateItems);
-  const entryIndexById = useMemo(
-    () => new Map(entries.map((entry, index) => [entry.id, index])),
-    [entries]
+  const entryIndexByEntry = useMemo(
+    () => new Map(orderedEntries.map((entry, index) => [entry, index])),
+    [orderedEntries]
   );
 
   if (entries.length === 0) {
@@ -111,7 +117,7 @@ export function TimelineView({ entries, onEdit, onPreview, searchQuery = '', hig
             );
           }
 
-          const entryIndex = entryIndexById.get(item.data.id) ?? entries.length - 1;
+          const entryIndex = entryIndexByEntry.get(item.data) ?? entries.length - 1;
 
           return (
             <TimelineEntry

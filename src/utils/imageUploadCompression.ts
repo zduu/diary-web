@@ -1,5 +1,7 @@
 const MAX_COMPRESSED_IMAGE_BYTES = 1.6 * 1024 * 1024;
 const MIN_COMPRESSION_SIZE_BYTES = 450 * 1024;
+const IMAGE_LOAD_TIMEOUT_MS = 15_000;
+const CANVAS_BLOB_TIMEOUT_MS = 15_000;
 const COMPRESSION_STEPS = [
   { maxDimension: 1600, quality: 0.82 },
   { maxDimension: 1400, quality: 0.78 },
@@ -8,17 +10,22 @@ const COMPRESSION_STEPS = [
 ] as const;
 
 function shouldSkipCompression(file: File) {
-  return !file.type.startsWith('image/')
-    || file.type === 'image/gif'
-    || file.type === 'image/svg+xml'
+  const mediaType = file.type.toLowerCase();
+  return !mediaType.startsWith('image/')
+    || mediaType === 'image/gif'
+    || mediaType === 'image/svg+xml'
     || file.size < MIN_COMPRESSION_SIZE_BYTES;
 }
 
 function canUseBrowserCompressionApis() {
   return typeof window !== 'undefined'
     && typeof document !== 'undefined'
+    && typeof Image !== 'undefined'
     && typeof URL !== 'undefined'
-    && typeof URL.createObjectURL === 'function';
+    && typeof URL.createObjectURL === 'function'
+    && typeof URL.revokeObjectURL === 'function'
+    && typeof HTMLCanvasElement !== 'undefined'
+    && typeof HTMLCanvasElement.prototype.toBlob === 'function';
 }
 
 function replaceFileExtension(filename: string, nextExtension: string) {
@@ -27,7 +34,8 @@ function replaceFileExtension(filename: string, nextExtension: string) {
 }
 
 function pickOutputType(file: File) {
-  if (file.type === 'image/png' || file.type === 'image/webp') {
+  const mediaType = file.type.toLowerCase();
+  if (mediaType === 'image/png' || mediaType === 'image/webp') {
     return 'image/webp';
   }
 
@@ -55,32 +63,75 @@ function getScaledDimensions(width: number, height: number, maxDimension: number
   };
 }
 
+function hasValidImageDimensions(image: HTMLImageElement) {
+  return Number.isFinite(image.naturalWidth)
+    && Number.isFinite(image.naturalHeight)
+    && image.naturalWidth > 0
+    && image.naturalHeight > 0;
+}
+
 function loadImageFromFile(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
     const image = new Image();
+    let settled = false;
 
     const cleanup = () => {
+      clearTimeout(timeoutId);
       URL.revokeObjectURL(objectUrl);
       image.onload = null;
       image.onerror = null;
     };
 
-    image.onload = () => {
+    const settle = (callback: () => void) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
       cleanup();
-      resolve(image);
+      callback();
+    };
+
+    const timeoutId = setTimeout(() => {
+      settle(() => reject(new Error('图片加载超时，无法压缩')));
+    }, IMAGE_LOAD_TIMEOUT_MS);
+
+    image.onload = () => {
+      settle(() => resolve(image));
     };
     image.onerror = () => {
-      cleanup();
-      reject(new Error('图片加载失败，无法压缩'));
+      settle(() => reject(new Error('图片加载失败，无法压缩')));
     };
     image.src = objectUrl;
   });
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement, outputType: string, quality?: number) {
-  return new Promise<Blob | null>((resolve) => {
-    canvas.toBlob((blob) => resolve(blob), outputType, quality);
+  return new Promise<Blob | null>((resolve, reject) => {
+    let settled = false;
+
+    const settle = (callback: () => void) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeoutId);
+      callback();
+    };
+
+    const timeoutId = setTimeout(() => {
+      settle(() => reject(new Error('图片压缩超时')));
+    }, CANVAS_BLOB_TIMEOUT_MS);
+
+    try {
+      canvas.toBlob((blob) => {
+        settle(() => resolve(blob));
+      }, outputType, quality);
+    } catch {
+      settle(() => resolve(null));
+    }
   });
 }
 
@@ -91,6 +142,10 @@ export async function prepareImageForUpload(file: File): Promise<File> {
 
   try {
     const image = await loadImageFromFile(file);
+    if (!hasValidImageDimensions(image)) {
+      return file;
+    }
+
     const outputType = pickOutputType(file);
     let bestBlob: Blob | null = null;
 

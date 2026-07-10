@@ -1,5 +1,5 @@
 import type { DiaryEntry } from '../../types/index.ts';
-import { normalizeTimeString } from '../../utils/timeUtils.ts';
+import { parseTimeString } from '../../utils/timeUtils.ts';
 import {
   ArchiveGroup,
   ArchiveGroupBy,
@@ -12,11 +12,15 @@ import {
 } from './archiveGroupingLabels';
 
 function getEntryDate(entry: DiaryEntry) {
-  return new Date(normalizeTimeString(entry.created_at!));
+  return parseTimeString(entry.created_at);
+}
+
+function getRequiredEntryDate(entry: DiaryEntry) {
+  return getEntryDate(entry) ?? new Date(0);
 }
 
 function sortEntriesByDate(entries: DiaryEntry[]) {
-  return [...entries].sort((a, b) => getEntryDate(b).getTime() - getEntryDate(a).getTime());
+  return [...entries].sort((a, b) => getRequiredEntryDate(b).getTime() - getRequiredEntryDate(a).getTime());
 }
 
 function groupEntriesByKey(entries: DiaryEntry[], getKey: (entry: DiaryEntry) => string) {
@@ -50,12 +54,12 @@ function createSubGroups(
   groupBy: Extract<ArchiveGroupBy, 'month' | 'week'>,
   useNaturalTime: boolean,
 ): ArchiveSubGroup[] {
-  const groups = groupEntriesByKey(entries, (entry) => getArchiveGroupKey(getEntryDate(entry), groupBy));
+  const groups = groupEntriesByKey(entries, (entry) => getArchiveGroupKey(getRequiredEntryDate(entry), groupBy));
 
   return Array.from(groups.entries())
     .map(([key, groupEntries]) => {
       const firstEntry = groupEntries[groupEntries.length - 1];
-      const date = getEntryDate(firstEntry);
+      const date = getRequiredEntryDate(firstEntry);
 
       return {
         key,
@@ -64,13 +68,13 @@ function createSubGroups(
         count: groupEntries.length,
       };
     })
-    .sort((a, b) => getEntryDate(b.entries[b.entries.length - 1]).getTime() - getEntryDate(a.entries[a.entries.length - 1]).getTime());
+    .sort((a, b) => getRequiredEntryDate(b.entries[b.entries.length - 1]).getTime() - getRequiredEntryDate(a.entries[a.entries.length - 1]).getTime());
 }
 
 function getArchiveGroupBy(entries: DiaryEntry[]): ArchiveGroupBy {
   const sortedEntries = sortEntriesByDate(entries);
-  const firstEntry = getEntryDate(sortedEntries[sortedEntries.length - 1]);
-  const lastEntry = getEntryDate(sortedEntries[0]);
+  const firstEntry = getRequiredEntryDate(sortedEntries[sortedEntries.length - 1]);
+  const lastEntry = getRequiredEntryDate(sortedEntries[0]);
   const timeSpanDays = Math.ceil((lastEntry.getTime() - firstEntry.getTime()) / (1000 * 60 * 60 * 24));
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -94,13 +98,15 @@ function getArchiveGroupBy(entries: DiaryEntry[]): ArchiveGroupBy {
 export function createArchiveGroups(entries: DiaryEntry[], useNaturalTime: boolean): ArchiveGroup[] {
   if (entries.length === 0) return [];
 
-  const sortedEntries = sortEntriesByDate(entries);
-  const groupBy = getArchiveGroupBy(sortedEntries);
-  const groups = groupEntriesByKey(sortedEntries, (entry) => getArchiveGroupKey(getEntryDate(entry), groupBy));
+  const datedEntries = entries.filter((entry) => getEntryDate(entry));
+  const undatedEntries = entries.filter((entry) => !getEntryDate(entry));
+  const sortedEntries = sortEntriesByDate(datedEntries);
+  const groupBy = sortedEntries.length > 0 ? getArchiveGroupBy(sortedEntries) : 'year';
+  const groups = groupEntriesByKey(sortedEntries, (entry) => getArchiveGroupKey(getRequiredEntryDate(entry), groupBy));
 
-  return Array.from(groups.entries()).map(([key, groupEntries]) => {
+  const datedGroups = Array.from(groups.entries()).map(([key, groupEntries]) => {
     const firstEntry = groupEntries[groupEntries.length - 1];
-    const date = getEntryDate(firstEntry);
+    const date = getRequiredEntryDate(firstEntry);
     let subGroups: ArchiveSubGroup[] | undefined;
 
     if (groupBy === 'year') {
@@ -120,4 +126,18 @@ export function createArchiveGroups(entries: DiaryEntry[], useNaturalTime: boole
       subGroups,
     };
   });
+
+  if (undatedEntries.length === 0) {
+    return datedGroups;
+  }
+
+  return [
+    ...datedGroups,
+    {
+      key: 'unknown-date',
+      title: '日期未知',
+      entries: undatedEntries,
+      count: undatedEntries.length,
+    },
+  ];
 }

@@ -1,6 +1,7 @@
 import type { ApiResponse, DiaryEntry } from '../../src/types/index.ts';
+import { parseTimeString } from '../../src/utils/timestampUtils.ts';
 import type { Env } from './_shared.ts';
-import { deleteManagedImagesIfUnreferenced } from './_imageStorage.ts';
+import { deleteManagedImagesIfUnreferenced, warnImageCleanupFailures } from './_imageStorage.ts';
 import {
   ensureEntryUuidsForRows,
   formatEntry,
@@ -26,16 +27,19 @@ type SyncResponse = {
   syncedAt: string;
 };
 
-function parseLastSyncedAt(value: unknown): string | null {
+function parseLastSyncedAt(value: unknown): { value: string | null; error?: string } {
   if (value == null || value === '') {
-    return null;
+    return { value: null };
   }
 
   if (typeof value !== 'string') {
-    return null;
+    return { value: null, error: 'lastSyncedAt 必须是有效时间字符串' };
   }
 
-  return Number.isNaN(Date.parse(value)) ? null : value;
+  const normalizedValue = value.trim();
+  return parseTimeString(normalizedValue)
+    ? { value: normalizedValue }
+    : { value: null, error: 'lastSyncedAt 必须是有效时间字符串' };
 }
 
 const SYNC_BODY_MAX_BYTES = 60 * 1024 * 1024;
@@ -57,13 +61,71 @@ function parseSyncEntries(input: unknown): { entries?: DiaryEntry[]; error?: str
   return { entries: input as DiaryEntry[] };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeRequiredSyncTimestamp(value: unknown, fieldLabel: string): { value?: string; error?: string } {
+  if (typeof value !== 'string' || !value.trim()) {
+    return { error: `${fieldLabel}格式无效` };
+  }
+
+  const normalizedValue = value.trim();
+  return parseTimeString(normalizedValue)
+    ? { value: normalizedValue }
+    : { error: `${fieldLabel}格式无效` };
+}
+
+function normalizeOptionalSyncTimestamp(value: unknown, fieldLabel: string): { value?: string | null; error?: string } {
+  if (value === undefined || value === null) {
+    return { value };
+  }
+
+  return normalizeRequiredSyncTimestamp(value, fieldLabel);
+}
+
+function normalizeSyncEntryPayload(value: unknown): { entry?: DiaryEntry; error?: string } {
+  if (!isRecord(value)) {
+    return { error: '请求体格式无效' };
+  }
+
+  const entryUuid = value.entry_uuid;
+  if (typeof entryUuid !== 'string' || !entryUuid.trim()) {
+    return { error: '同步标识格式无效' };
+  }
+
+  const { value: createdAt, error: createdAtError } = normalizeRequiredSyncTimestamp(value.created_at, '创建时间');
+  if (createdAtError) {
+    return { error: createdAtError };
+  }
+
+  const { value: updatedAt, error: updatedAtError } = normalizeRequiredSyncTimestamp(value.updated_at, '更新时间');
+  if (updatedAtError) {
+    return { error: updatedAtError };
+  }
+
+  const { value: deletedAt, error: deletedAtError } = normalizeOptionalSyncTimestamp(value.deleted_at, '删除时间');
+  if (deletedAtError) {
+    return { error: deletedAtError };
+  }
+
+  return {
+    entry: {
+      ...value,
+      entry_uuid: entryUuid.trim(),
+      created_at: createdAt,
+      updated_at: updatedAt,
+      deleted_at: deletedAt,
+    } as DiaryEntry,
+  };
+}
+
 function getComparableTimestamp(value: unknown) {
   if (typeof value !== 'string') {
     return 0;
   }
 
-  const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp) ? 0 : timestamp;
+  return parseTimeString(value)?.getTime() ?? 0;
 }
 
 function isPendingDeleteEntry(entry: DiaryEntry) {
@@ -115,10 +177,23 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     let pushedCount = 0;
     let deletedCount = 0;
     const confirmedEntryUuids = new Set<string>();
-    const lastSyncedAt = parseLastSyncedAt(body.lastSyncedAt);
+    const { value: lastSyncedAt, error: lastSyncedAtError } = parseLastSyncedAt(body.lastSyncedAt);
+    if (lastSyncedAtError) {
+      return jsonResponse<ApiResponse>({
+        success: false,
+        error: lastSyncedAtError,
+      }, { status: 400 });
+    }
 
     for (let index = 0; index < entries.length; index += 1) {
-      const entry = entries[index]!;
+      const { entry, error: syncEntryError } = normalizeSyncEntryPayload(entries[index]);
+      if (!entry) {
+        return jsonResponse<ApiResponse>({
+          success: false,
+          error: `第 ${index + 1} 条同步数据无效: ${syncEntryError ?? '格式无效'}`,
+        }, { status: 400 });
+      }
+
       const { data: normalizedEntry, error } = normalizeEntryInput(entry, {
         requireContent: !isPendingDeleteEntry(entry),
         includeCreatedAt: true,
@@ -143,7 +218,8 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
         }
 
         const existingDeletedAt = getComparableTimestamp(existingEntry.deleted_at);
-        const incomingDeletedAt = getComparableTimestamp(normalizedEntry.updated_at);
+        const deleteTimestamp = entry.deleted_at ?? normalizedEntry.updated_at;
+        const incomingDeletedAt = getComparableTimestamp(deleteTimestamp);
 
         if (incomingDeletedAt < Math.max(existingDeletedAt, getComparableTimestamp(existingEntry.updated_at))) {
           continue;
@@ -152,7 +228,7 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
         const deleteResult = await context.env.DB.prepare(
           'UPDATE diary_entries SET deleted_at = ?, updated_at = ? WHERE entry_uuid = ? RETURNING *'
         )
-          .bind(normalizedEntry.updated_at, normalizedEntry.updated_at, normalizedEntry.entry_uuid)
+          .bind(deleteTimestamp, deleteTimestamp, normalizedEntry.entry_uuid)
           .first<Record<string, unknown>>();
 
         if (deleteResult) {
@@ -165,9 +241,7 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
             excludingEntryId: Number(existingEntry.id ?? 0),
           });
 
-          if (imageCleanup.failedKeys.length > 0) {
-            console.warn('Failed to delete some unreferenced R2 images after sync deletion:', imageCleanup.failedKeys);
-          }
+          warnImageCleanupFailures('sync deletion', imageCleanup.failedKeys);
         }
         continue;
       }

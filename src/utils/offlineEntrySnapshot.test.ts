@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearOfflineEntrySnapshot, readOfflineEntrySnapshot, writeOfflineEntrySnapshot } from './offlineEntrySnapshot';
 
+const snapshotKey = 'diary_offline_public_entries_v1';
+
 describe('offlineEntrySnapshot', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -41,6 +43,35 @@ describe('offlineEntrySnapshot', () => {
     ]);
 
     clearOfflineEntrySnapshot();
+    expect(readOfflineEntrySnapshot()).toBeNull();
+  });
+
+  it('ignores malformed snapshots', () => {
+    window.localStorage.setItem(snapshotKey, JSON.stringify({
+      savedAt: new Date().toISOString(),
+      entries: [{ title: '缺少内容' }],
+    }));
+    expect(readOfflineEntrySnapshot()).toBeNull();
+
+    window.localStorage.setItem(snapshotKey, JSON.stringify({
+      savedAt: Date.now(),
+      entries: [{
+        title: '公开内容',
+        content: '可离线查看',
+      }],
+    }));
+    expect(readOfflineEntrySnapshot()).toBeNull();
+
+    window.localStorage.setItem(snapshotKey, JSON.stringify({
+      savedAt: 'not-a-date',
+      entries: [{
+        title: '公开内容',
+        content: '可离线查看',
+      }],
+    }));
+    expect(readOfflineEntrySnapshot()).toBeNull();
+
+    window.localStorage.setItem(snapshotKey, '{bad json');
     expect(readOfflineEntrySnapshot()).toBeNull();
   });
 });

@@ -1,18 +1,19 @@
 import type { ReactNode } from 'react';
 import { Search, Loader } from 'lucide-react';
 import { useThemeContext } from '../ThemeProvider';
+import type { AMapPoi } from './amapTypes';
 
 interface MapPickerSearchPanelProps {
   isMobile: boolean;
   searchQuery: string;
   isMapLoaded: boolean;
   isSearching: boolean;
-  searchResults: any[];
+  searchResults: AMapPoi[];
   onSearchQueryChange: (value: string) => void;
   onSearch: () => void;
   onSearchFocus: () => void;
   onSearchBlur: () => void;
-  onSelectSearchResult: (poi: any) => void;
+  onSelectSearchResult: (poi: AMapPoi) => void;
   debugActions?: ReactNode;
 }
 

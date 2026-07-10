@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { DiaryEntry } from '../../types/index.ts';
 import type { ConfirmState, OperationState } from './adminPanelTypes';
 import { apiService } from '../../services/api';
+import { sanitizeEntryHidden } from '../../utils/entryTextValidation.ts';
 import { debugError, debugLog } from '../../utils/logger.ts';
 
 interface UseAdminPanelEntryActionsOptions {
@@ -63,7 +64,7 @@ export function useAdminPanelEntryActions({
       return;
     }
 
-    const isCurrentlyHidden = entry.hidden;
+    const isCurrentlyHidden = sanitizeEntryHidden(entry.hidden);
 
     try {
       await runEntryOperation(entryId, isCurrentlyHidden ? 'showing' : 'hiding', async () => {
@@ -126,6 +127,8 @@ export function useAdminPanelEntryActions({
 
       await confirmDeleteEntry(confirmState.entryId);
       clearConfirmState();
+    } catch (error) {
+      handleAdminOperationError(error, confirmState.type === 'logout' ? '退出登录失败' : '操作失败');
     } finally {
       setConfirmLoading(false);
     }

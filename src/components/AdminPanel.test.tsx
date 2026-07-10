@@ -4,7 +4,9 @@ import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminAuthProvider } from './AdminAuthContext';
 import { AdminPanel } from './AdminPanel';
+import { AdminEntriesSection, formatAdminSyncDescription } from './admin/AdminPanelViews';
 import { ThemeProvider } from './ThemeProvider';
+import type { ThemeConfig } from '../hooks/useTheme';
 import { apiService } from '../services/api';
 import * as adminSettingsStore from './admin/adminSettingsStore';
 import * as adminPanelActions from './admin/adminPanelActions';
@@ -67,6 +69,36 @@ const sampleEntry = {
   updated_at: '2026-04-12T10:00:00.000Z',
 };
 
+const testTheme: ThemeConfig = {
+  mode: 'light',
+  colors: {
+    primary: '#3b82f6',
+    secondary: '#64748b',
+    background: '#f9fafb',
+    surface: '#ffffff',
+    text: '#111827',
+    textSecondary: '#64748b',
+    border: '#e5e7eb',
+    accent: '#6366f1',
+  },
+  effects: {
+    blur: 'backdrop-blur-sm',
+    shadow: 'shadow-md',
+    gradient: 'bg-white',
+  },
+};
+
+const syncedStatus = {
+  totalEntries: 0,
+  visibleEntries: 0,
+  pendingCreates: 0,
+  pendingUpdates: 0,
+  pendingDeletes: 0,
+  conflicts: 0,
+  totalPending: 0,
+  lastSyncedAt: '2026-04-18T11:00:00.000Z',
+};
+
 async function fillAdminPassword(user: ReturnType<typeof userEvent.setup>, password: string) {
   const input = await screen.findByPlaceholderText('输入管理员密码');
   await user.type(input, password);
@@ -95,6 +127,28 @@ describe('AdminPanel', () => {
     document.documentElement.className = '';
     document.body.className = '';
     vi.restoreAllMocks();
+  });
+
+  it('formats sync status descriptions without leaking invalid dates', () => {
+    expect(formatAdminSyncDescription(null, false)).toBe('正在读取本地同步状态。');
+    expect(formatAdminSyncDescription(syncedStatus, true)).toBe('正在把本地改动推送到云端，请稍候。');
+    expect(formatAdminSyncDescription({
+      ...syncedStatus,
+      pendingCreates: 1,
+      pendingUpdates: 2,
+      pendingDeletes: 3,
+      conflicts: 1,
+      totalPending: 6,
+    }, false)).toBe('待同步 6 条，新增 1 / 更新 2 / 删除 3 / 冲突 1');
+    expect(formatAdminSyncDescription(syncedStatus, false)).toMatch(/^当前无待同步内容，上次同步于 /);
+    expect(formatAdminSyncDescription({
+      ...syncedStatus,
+      lastSyncedAt: 'not-a-date',
+    }, false)).toBe('当前无待同步内容，上次同步于 未知时间');
+    expect(formatAdminSyncDescription({
+      ...syncedStatus,
+      lastSyncedAt: null,
+    }, false)).toBe('当前无待同步内容，还没有执行过云端同步。');
   });
 
   it('logs in successfully and switches to the admin view', async () => {
@@ -132,6 +186,43 @@ describe('AdminPanel', () => {
 
     expect(await screen.findByRole('button', { name: '退出登录' })).toBeInTheDocument();
     expect(screen.getByText('暂无日记')).toBeInTheDocument();
+  });
+
+  it('disables id-based entry actions for legacy entries without ids', () => {
+    const onToggleVisibility = vi.fn();
+    const onDeleteEntry = vi.fn();
+
+    render(
+      <AdminEntriesSection
+        searchQuery=""
+        onSearchQueryChange={vi.fn()}
+        filteredEntries={[
+          {
+            title: '无 id 后台记录',
+            content: '旧数据仍应可展示',
+            created_at: 'not-a-date',
+          },
+        ]}
+        entryTimestampLabels={{ 'index-0': '未知时间' }}
+        theme={testTheme}
+        getTextColor={(type) => (type === 'primary' ? testTheme.colors.text : testTheme.colors.textSecondary)}
+        getOperationState={() => 'idle'}
+        onEditEntry={vi.fn()}
+        onToggleVisibility={onToggleVisibility}
+        onDeleteEntry={onDeleteEntry}
+      />
+    );
+
+    expect(screen.getByText('无 id 后台记录')).toBeInTheDocument();
+    expect(screen.queryByTitle('编辑日记')).not.toBeInTheDocument();
+    expect(screen.getByTitle('缺少日记 ID，无法切换显示状态')).toBeDisabled();
+    expect(screen.getByTitle('缺少日记 ID，无法删除')).toBeDisabled();
+
+    fireEvent.click(screen.getByTitle('缺少日记 ID，无法切换显示状态'));
+    fireEvent.click(screen.getByTitle('缺少日记 ID，无法删除'));
+
+    expect(onToggleVisibility).not.toHaveBeenCalled();
+    expect(onDeleteEntry).not.toHaveBeenCalled();
   });
 
   it('shows an error notification when login fails', async () => {
@@ -195,6 +286,39 @@ describe('AdminPanel', () => {
     });
 
     expect(await screen.findByPlaceholderText('输入管理员密码')).toBeInTheDocument();
+  });
+
+  it('shows an error notification when confirmed logout fails', async () => {
+    vi.spyOn(apiService, 'loginAdmin').mockResolvedValue({
+      isAuthenticated: true,
+      isAdminAuthenticated: true,
+    });
+    vi.spyOn(apiService, 'logout').mockRejectedValue(new Error('退出登录失败'));
+    vi.spyOn(adminSettingsStore, 'loadAdminPanelSettings').mockResolvedValue(defaultLoadedSettings);
+    const onClose = vi.fn();
+    const onSessionChange = vi.fn();
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <AdminPanel
+        isOpen={true}
+        onClose={onClose}
+        entries={[]}
+        onEntriesUpdate={vi.fn()}
+        onSessionChange={onSessionChange}
+      />
+    );
+
+    await fillAdminPassword(user, 'admin-pass');
+    await user.click(screen.getByRole('button', { name: '验证' }));
+    expect(await screen.findByRole('button', { name: '退出登录' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '退出登录' }));
+    await user.click(await screen.findByRole('button', { name: '确认退出' }));
+
+    expect(await screen.findByText('退出登录失败')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText('退出管理员登录')).toBeInTheDocument();
   });
 
   it('toggles entry visibility and refreshes the admin list', async () => {
@@ -271,6 +395,62 @@ describe('AdminPanel', () => {
 
     expect(await screen.findByText('应用密码保护已开启！')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /关闭访问密码/ })).toBeInTheDocument();
+  });
+
+  it('shows an error notification when welcome page setting fails to save', async () => {
+    vi.spyOn(apiService, 'loginAdmin').mockResolvedValue({
+      isAuthenticated: true,
+      isAdminAuthenticated: true,
+    });
+    vi.spyOn(adminSettingsStore, 'loadAdminPanelSettings').mockResolvedValue(defaultLoadedSettings);
+    vi.spyOn(adminSettingsStore, 'persistAdminSettings').mockRejectedValue(new Error('保存欢迎页设置失败'));
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <AdminPanel
+        isOpen={true}
+        onClose={vi.fn()}
+        entries={[]}
+        onEntriesUpdate={vi.fn()}
+      />
+    );
+
+    await fillAdminPassword(user, 'admin-pass');
+    await user.click(screen.getByRole('button', { name: '验证' }));
+    expect(await screen.findByRole('button', { name: '退出登录' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /禁用欢迎页面/ }));
+
+    expect(await screen.findByText('保存欢迎页设置失败')).toBeInTheDocument();
+  });
+
+  it('shows an error notification when exporting entries fails', async () => {
+    vi.spyOn(apiService, 'loginAdmin').mockResolvedValue({
+      isAuthenticated: true,
+      isAdminAuthenticated: true,
+    });
+    vi.spyOn(adminSettingsStore, 'loadAdminPanelSettings').mockResolvedValue(defaultLoadedSettings);
+    vi.spyOn(adminPanelActions, 'exportEntriesToJson').mockImplementation(() => {
+      throw new Error('导出文件失败');
+    });
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <AdminPanel
+        isOpen={true}
+        onClose={vi.fn()}
+        entries={[sampleEntry]}
+        onEntriesUpdate={vi.fn()}
+      />
+    );
+
+    await fillAdminPassword(user, 'admin-pass');
+    await user.click(screen.getByRole('button', { name: '验证' }));
+    expect(await screen.findByRole('button', { name: '退出登录' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /导出数据/ }));
+
+    expect(await screen.findByText('导出文件失败')).toBeInTheDocument();
   });
 
   it('shows the import mode dialog inside the admin panel and refreshes after import', async () => {

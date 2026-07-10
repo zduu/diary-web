@@ -15,6 +15,22 @@ export interface LocationDetails {
   country?: string;
 }
 
+export interface LocationCoordinate {
+  latitude: number;
+  longitude: number;
+}
+
+export interface LocationCoordinateOffset extends LocationCoordinate {
+  distance: number;
+}
+
+export interface LocationHighAccuracyMeta {
+  accuracy?: number;
+  confidence: 'high' | 'medium' | 'low';
+  attempts: number;
+  coordinateOffset?: LocationCoordinateOffset;
+}
+
 export interface LocationInfo {
   name?: string;
   latitude?: number;
@@ -22,6 +38,9 @@ export interface LocationInfo {
   address?: string;
   nearbyPOIs?: POI[];
   details?: LocationDetails;
+  originalGPS?: LocationCoordinate;
+  coordinateOffset?: LocationCoordinateOffset;
+  highAccuracy?: LocationHighAccuracyMeta;
 }
 
 export type EntrySyncState =
@@ -50,7 +69,7 @@ export interface DiaryEntry {
   hidden?: boolean;
 }
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;

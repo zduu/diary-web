@@ -33,6 +33,8 @@ import { useAdminAuth } from './AdminAuthContext';
 import { apiService } from '../services/api';
 import type { AdminAccessProfile } from '../services/apiTypes.ts';
 import type { DiarySyncStatus } from '../services/entrySync.ts';
+import { getDiaryEntryKey } from '../utils/diaryEntryIdentity.ts';
+import { sanitizeEntryContent, sanitizeEntryHidden, sanitizeEntryTitle } from '../utils/entryTextValidation.ts';
 import { getSmartTimeDisplay } from '../utils/timeUtils.ts';
 import { debugError, debugLog } from '../utils/logger.ts';
 
@@ -264,8 +266,12 @@ export function AdminPanel({
 
   // 导出所有日记
   const handleExportEntries = async () => {
-    const { exportEntriesToJson } = await import('./admin/adminPanelActions');
-    exportEntriesToJson(entries);
+    try {
+      const { exportEntriesToJson } = await import('./admin/adminPanelActions');
+      exportEntriesToJson(entries);
+    } catch (error) {
+      handleAdminOperationError(error, '导出失败');
+    }
   };
 
   const handleRunR2SelfCheck = async () => {
@@ -540,7 +546,12 @@ export function AdminPanel({
 
   const handleToggleWelcomePage = async () => {
     const newSettings = { ...settings, welcomePageEnabled: !settings.welcomePageEnabled };
-    await saveSettings(newSettings);
+    try {
+      await saveSettings(newSettings);
+      showOperationFeedback(`欢迎页面已${newSettings.welcomePageEnabled ? '启用' : '禁用'}。`);
+    } catch {
+      // saveSettings already reports the error; keep the button handler from leaking a rejected promise.
+    }
   };
 
   // 过滤日记（包括隐藏的）
@@ -548,19 +559,24 @@ export function AdminPanel({
     const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
 
     return entries.filter((entry) => {
+      const entryTitle = sanitizeEntryTitle(entry.title);
+      const entryContent = sanitizeEntryContent(entry.content);
       const matchesSearch = !normalizedQuery ||
-        entry.title?.toLowerCase().includes(normalizedQuery) ||
-        entry.content.toLowerCase().includes(normalizedQuery);
+        entryTitle.toLowerCase().includes(normalizedQuery) ||
+        entryContent.toLowerCase().includes(normalizedQuery);
 
       if (settings.showHiddenEntries) {
         return matchesSearch;
       }
 
-      return matchesSearch && !entry.hidden;
+      return matchesSearch && !sanitizeEntryHidden(entry.hidden);
     });
   }, [deferredSearchQuery, entries, settings.showHiddenEntries]);
   const entryTimestampLabels = useMemo(
-    () => Object.fromEntries(entries.map((entry) => [entry.id ?? -1, getSmartTimeDisplay(entry.created_at!).tooltip])),
+    () => Object.fromEntries(entries.map((entry, index) => [
+      getDiaryEntryKey(entry, index),
+      getSmartTimeDisplay(entry.created_at).tooltip,
+    ])),
     [entries]
   );
   const handleEditEntry = onEdit ? (entry: typeof entries[number]) => {
@@ -646,7 +662,7 @@ export function AdminPanel({
       zIndex={99999}
       padding="16px"
       backdropStyle={{ backgroundColor: 'rgba(0, 0, 0, 0.45)' }}
-      panelClassName="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl"
+      panelClassName="w-full max-w-5xl max-h-[90vh] overflow-y-auto overscroll-contain rounded-xl"
       panelStyle={buildAdminPanelStyle(theme)}
     >
       <ModalHeader

@@ -1,12 +1,21 @@
-import { createPortal } from 'react-dom';
 import { MapPin, X } from 'lucide-react';
 import type { LocationInfo } from '../types/index.ts';
+import { ModalShell } from './ModalShell';
 import { useThemeContext } from './ThemeProvider';
+import { isValidLatitude, isValidLongitude } from '../utils/geoCoordinates.ts';
 
 interface LocationDetailModalProps {
   isOpen: boolean;
   location: LocationInfo | null;
   onClose: () => void;
+}
+
+function formatLatitude(value?: number) {
+  return isValidLatitude(value) ? value.toFixed(6) : null;
+}
+
+function formatLongitude(value?: number) {
+  return isValidLongitude(value) ? value.toFixed(6) : null;
 }
 
 export function LocationDetailModal({
@@ -19,6 +28,10 @@ export function LocationDetailModal({
   if (!isOpen || !location) {
     return null;
   }
+
+  const latitudeLabel = formatLatitude(location.latitude);
+  const longitudeLabel = formatLongitude(location.longitude);
+  const hasCoordinates = Boolean(latitudeLabel || longitudeLabel);
 
   const panelStyle = {
     backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
@@ -35,97 +48,91 @@ export function LocationDetailModal({
     color: theme.colors.text,
   };
 
-  return createPortal(
-    <div
-      className="location-detail-modal fixed inset-0 flex items-center justify-center bg-black/50 p-4"
-      style={{ zIndex: 10000 }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
+  return (
+    <ModalShell
+      isOpen={isOpen}
+      onClose={onClose}
+      zIndex={10000}
+      ariaLabelledby="location-detail-title"
+      backdropClassName="location-detail-modal bg-black/50"
+      panelClassName="mx-4 max-h-[90vh] w-full max-w-md overflow-y-auto overscroll-contain rounded-[1.5rem] p-5 md:p-6"
+      panelStyle={panelStyle}
     >
-      <div
-        className="mx-4 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-[1.5rem] p-5 md:p-6"
-        style={panelStyle}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="mb-5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <MapPin className="h-5 w-5" style={{ color: theme.colors.primary }} />
-            <h3 className="text-lg font-semibold" style={{ color: theme.colors.text }}>
-              位置详情
-            </h3>
+      <div className="mb-5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <MapPin className="h-5 w-5" style={{ color: theme.colors.primary }} />
+          <h3 id="location-detail-title" className="text-lg font-semibold" style={{ color: theme.colors.text }}>
+            位置详情
+          </h3>
+        </div>
+        <button
+          onClick={onClose}
+          aria-label="关闭位置详情"
+          className="rounded-xl p-2 transition-opacity hover:opacity-80"
+          style={fieldStyle}
+        >
+          <X className="h-4 w-4" style={{ color: theme.colors.textSecondary }} />
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <div className="mb-1 text-sm" style={{ color: theme.colors.textSecondary }}>
+            位置名称
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-xl p-2 transition-opacity hover:opacity-80"
-            style={fieldStyle}
-          >
-            <X className="h-4 w-4" style={{ color: theme.colors.textSecondary }} />
-          </button>
+          <div className="rounded-2xl p-3 text-sm" style={fieldStyle}>
+            {location.name || '未知位置'}
+          </div>
         </div>
 
-        <div className="space-y-3">
+        {location.address && (
           <div>
             <div className="mb-1 text-sm" style={{ color: theme.colors.textSecondary }}>
-              位置名称
+              详细地址
             </div>
-            <div className="rounded-2xl p-3 text-sm" style={fieldStyle}>
-              {location.name || '未知位置'}
+            <div className="rounded-2xl p-3 text-sm leading-6" style={fieldStyle}>
+              {location.address}
             </div>
           </div>
+        )}
 
-          {location.address && (
-            <div>
-              <div className="mb-1 text-sm" style={{ color: theme.colors.textSecondary }}>
-                详细地址
-              </div>
-              <div className="rounded-2xl p-3 text-sm leading-6" style={fieldStyle}>
-                {location.address}
-              </div>
+        {hasCoordinates && (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl p-3 text-sm" style={fieldStyle}>
+              纬度: {latitudeLabel ?? '-'}
             </div>
-          )}
-
-          {(location.latitude !== undefined || location.longitude !== undefined) && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl p-3 text-sm" style={fieldStyle}>
-                纬度: {location.latitude !== undefined ? location.latitude.toFixed(6) : '-'}
-              </div>
-              <div className="rounded-2xl p-3 text-sm" style={fieldStyle}>
-                经度: {location.longitude !== undefined ? location.longitude.toFixed(6) : '-'}
-              </div>
+            <div className="rounded-2xl p-3 text-sm" style={fieldStyle}>
+              经度: {longitudeLabel ?? '-'}
             </div>
-          )}
+          </div>
+        )}
 
-          {location.details && (
-            <div>
-              <div className="mb-1 text-sm" style={{ color: theme.colors.textSecondary }}>
-                位置详情
-              </div>
-              <div className="space-y-1 rounded-2xl p-3 text-sm" style={fieldStyle}>
-                {location.details.country && <div>国家: {location.details.country}</div>}
-                {location.details.state && <div>省份: {location.details.state}</div>}
-                {location.details.city && <div>城市: {location.details.city}</div>}
-                {location.details.suburb && <div>区域: {location.details.suburb}</div>}
-                {location.details.road && <div>道路: {location.details.road}</div>}
-                {location.details.building && <div>建筑: {location.details.building}</div>}
-              </div>
+        {location.details && (
+          <div>
+            <div className="mb-1 text-sm" style={{ color: theme.colors.textSecondary }}>
+              位置详情
             </div>
-          )}
-        </div>
-
-        <div className="mt-6 flex justify-end">
-          <button
-            onClick={onClose}
-            className="rounded-xl px-4 py-2 text-sm font-medium text-white"
-            style={{ backgroundColor: theme.colors.primary }}
-          >
-            关闭
-          </button>
-        </div>
+            <div className="space-y-1 rounded-2xl p-3 text-sm" style={fieldStyle}>
+              {location.details.country && <div>国家: {location.details.country}</div>}
+              {location.details.state && <div>省份: {location.details.state}</div>}
+              {location.details.city && <div>城市: {location.details.city}</div>}
+              {location.details.suburb && <div>区域: {location.details.suburb}</div>}
+              {location.details.road && <div>道路: {location.details.road}</div>}
+              {location.details.building && <div>建筑: {location.details.building}</div>}
+            </div>
+          </div>
+        )}
       </div>
-    </div>,
-    document.body
+
+      <div className="mt-6 flex justify-end">
+        <button
+          onClick={onClose}
+          className="rounded-xl px-4 py-2 text-sm font-medium text-white"
+          style={{ backgroundColor: theme.colors.primary }}
+        >
+          关闭
+        </button>
+      </div>
+    </ModalShell>
   );
 }

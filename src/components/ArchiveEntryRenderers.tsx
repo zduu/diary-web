@@ -5,6 +5,8 @@ import type { ArchiveDisplayMode } from './archive/archiveTypes';
 import { getArchiveEntryIndicators, getArchiveEntryTimestamp } from './archive/archiveEntryMeta';
 import { getEntryPreview } from './entry/entryContent';
 import { EntrySummaryText, EntryTagList, EntryTitleBlock } from './entry/entryDisplay';
+import { getDiaryEntryDomId, hasPersistedDiaryEntryId } from '../utils/diaryEntryIdentity.ts';
+import { sanitizeEntryContent, sanitizeEntryTags, sanitizeEntryTitle } from '../utils/entryTextValidation.ts';
 
 interface ArchiveEntryRendererProps {
   entry: DiaryEntry;
@@ -91,11 +93,12 @@ function ArchiveTagSection({
   tagLimit: number;
   className?: string;
 }) {
-  if (!entry.tags || entry.tags.length === 0) {
+  const entryTags = sanitizeEntryTags(entry.tags);
+  if (entryTags.length === 0) {
     return null;
   }
 
-  const visibleTags = entry.tags.slice(0, tagLimit);
+  const visibleTags = entryTags.slice(0, tagLimit);
 
   return (
     <div className={className}>
@@ -103,7 +106,7 @@ function ArchiveTagSection({
         theme={theme}
         tags={visibleTags}
         isMobile={isMobile}
-        extraCount={Math.max(0, entry.tags.length - visibleTags.length)}
+        extraCount={Math.max(0, entryTags.length - visibleTags.length)}
       />
     </div>
   );
@@ -119,15 +122,17 @@ export function ArchiveEntryRenderer({
   onPreview,
   isHighlighted = false,
 }: ArchiveEntryRendererProps) {
-  const { dateLabel, timeLabel } = getArchiveEntryTimestamp(entry.created_at!);
+  const { dateLabel, timeLabel } = getArchiveEntryTimestamp(entry.created_at);
   const { moodDisplay, weatherDisplay } = getArchiveEntryIndicators(entry.mood, entry.weather);
-  const canEdit = Boolean(onEdit && isAdminAuthenticated);
+  const entryTitle = sanitizeEntryTitle(entry.title);
+  const entryContent = sanitizeEntryContent(entry.content);
+  const canEdit = Boolean(onEdit && isAdminAuthenticated && hasPersistedDiaryEntryId(entry));
   const openPreview = () => onPreview?.(entry);
 
   if (displayMode === 'list') {
     return (
       <div
-        id={entry.id ? `entry-${entry.id}` : undefined}
+        id={getDiaryEntryDomId(entry)}
         className={`archive-entry-shell cursor-pointer p-4 transition-all duration-500 hover:bg-opacity-50 ${isHighlighted ? 'ring-highlight rounded-xl' : ''}`}
         style={{
           backgroundColor: isHighlighted ? (theme.mode === 'dark' ? 'rgba(55, 65, 81, 0.4)' : `${theme.colors.primary}08`) : 'transparent',
@@ -153,7 +158,7 @@ export function ArchiveEntryRenderer({
               <div className="min-w-0 flex-1">
                 <EntryTitleBlock
                   theme={theme}
-                  title={entry.title || '无标题'}
+                  title={entryTitle}
                   isMobile={isMobile}
                   size="archive"
                   clampClassName="truncate"
@@ -167,7 +172,7 @@ export function ArchiveEntryRenderer({
             </div>
 
             <EntrySummaryText theme={theme} isMobile={isMobile} lines={2} className="mb-2">
-              {getEntryPreview(entry.content, 100)}
+              {getEntryPreview(entryContent, 100)}
             </EntrySummaryText>
 
             <ArchiveTagSection
@@ -193,7 +198,7 @@ export function ArchiveEntryRenderer({
   if (displayMode === 'cards') {
     return (
       <div
-        id={entry.id ? `entry-${entry.id}` : undefined}
+        id={getDiaryEntryDomId(entry)}
         className={`archive-entry-shell cursor-pointer rounded-lg border p-4 transition-all hover:shadow-md ${isMobile ? 'mb-3' : 'mb-4'} ${isHighlighted ? 'ring-highlight' : ''}`}
         style={{
           backgroundColor: theme.mode === 'dark'
@@ -234,14 +239,14 @@ export function ArchiveEntryRenderer({
 
         <EntryTitleBlock
           theme={theme}
-          title={entry.title || '无标题'}
+          title={entryTitle}
           isMobile={isMobile}
           size="archive"
           clampClassName="line-clamp-1"
         />
 
         <EntrySummaryText theme={theme} isMobile={isMobile} lines={3} className="mb-3">
-          {getEntryPreview(entry.content, 140)}
+          {getEntryPreview(entryContent, 140)}
         </EntrySummaryText>
 
         <ArchiveTagSection
@@ -265,7 +270,7 @@ export function ArchiveEntryRenderer({
   if (displayMode === 'compact') {
     return (
       <div
-        id={entry.id ? `entry-${entry.id}` : undefined}
+        id={getDiaryEntryDomId(entry)}
         className={`archive-entry-shell flex cursor-pointer items-center gap-3 rounded-lg p-2 transition-all hover:bg-opacity-50 ${isHighlighted ? 'ring-highlight' : ''}`}
         style={{
           backgroundColor: theme.mode === 'dark'
@@ -291,7 +296,7 @@ export function ArchiveEntryRenderer({
             <div className="min-w-0 flex-1">
               <EntryTitleBlock
                 theme={theme}
-                title={entry.title || '无标题'}
+                title={entryTitle}
                 isMobile={isMobile}
                 size="compact"
                 clampClassName="truncate"
@@ -305,7 +310,7 @@ export function ArchiveEntryRenderer({
           </div>
 
           <EntrySummaryText theme={theme} isMobile={isMobile} lines={1}>
-            {getEntryPreview(entry.content, 60)}
+            {getEntryPreview(entryContent, 60)}
           </EntrySummaryText>
         </div>
 
@@ -315,7 +320,7 @@ export function ArchiveEntryRenderer({
   }
 
   return (
-    <div id={entry.id ? `entry-${entry.id}` : undefined} className={`archive-entry-shell flex gap-4 pb-4 ${isHighlighted ? 'ring-highlight rounded-xl' : ''}`}>
+    <div id={getDiaryEntryDomId(entry)} className={`archive-entry-shell flex gap-4 pb-4 ${isHighlighted ? 'ring-highlight rounded-xl' : ''}`}>
       <div className="flex flex-col items-center">
         <div
           className="h-3 w-3 rounded-full border-2"
@@ -355,14 +360,14 @@ export function ArchiveEntryRenderer({
 
         <EntryTitleBlock
           theme={theme}
-          title={entry.title || '无标题'}
+          title={entryTitle}
           isMobile={isMobile}
           size="archive"
           clampClassName="line-clamp-1"
         />
 
         <EntrySummaryText theme={theme} isMobile={isMobile} lines={2} className="mb-2">
-          {getEntryPreview(entry.content, 100)}
+          {getEntryPreview(entryContent, 100)}
         </EntrySummaryText>
 
         <ArchiveTagSection

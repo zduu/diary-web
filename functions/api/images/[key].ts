@@ -10,6 +10,7 @@ function buildImageHeaders(object: R2ObjectBody) {
   const headers = new Headers();
   headers.set('Cache-Control', IMAGE_CACHE_CONTROL);
   headers.set('Content-Type', object.httpMetadata?.contentType || DEFAULT_IMAGE_CONTENT_TYPE);
+  headers.set('X-Content-Type-Options', 'nosniff');
 
   if (typeof object.size === 'number' && object.size >= 0) {
     headers.set('Content-Length', String(object.size));

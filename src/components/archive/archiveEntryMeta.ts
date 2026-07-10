@@ -1,4 +1,5 @@
-import { normalizeTimeString } from '../../utils/timeUtils.ts';
+import { parseTimeString } from '../../utils/timeUtils.ts';
+import { sanitizeEntryMood, sanitizeEntryWeather } from '../../utils/entryTextValidation.ts';
 
 const archiveMoodEmojis: Record<string, string> = {
   happy: '😊',
@@ -16,34 +17,45 @@ const archiveWeatherEmojis: Record<string, string> = {
   snowy: '❄️',
 };
 
-function formatArchiveEntryDate(dateString: string) {
-  const date = new Date(normalizeTimeString(dateString));
+function formatArchiveEntryDate(dateString?: string | null) {
+  const date = parseTimeString(dateString);
+  if (!date) {
+    return '日期未知';
+  }
+
   return `${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-function formatArchiveEntryTime(dateString: string) {
-  const date = new Date(normalizeTimeString(dateString));
+function formatArchiveEntryTime(dateString?: string | null) {
+  const date = parseTimeString(dateString);
+  if (!date) {
+    return '--:--';
+  }
+
   return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
 }
 
-function getArchiveMoodDisplay(mood?: string) {
-  return archiveMoodEmojis[mood || 'neutral'] || '😐';
+function getArchiveMoodDisplay(mood: string) {
+  return archiveMoodEmojis[mood] || '😐';
 }
 
-function getArchiveWeatherDisplay(weather?: string) {
-  return archiveWeatherEmojis[weather || 'unknown'] || '';
+function getArchiveWeatherDisplay(weather: string) {
+  return archiveWeatherEmojis[weather] || '';
 }
 
-export function getArchiveEntryTimestamp(dateString: string) {
+export function getArchiveEntryTimestamp(dateString?: string | null) {
   return {
     dateLabel: formatArchiveEntryDate(dateString),
     timeLabel: formatArchiveEntryTime(dateString),
   };
 }
 
-export function getArchiveEntryIndicators(mood?: string, weather?: string) {
+export function getArchiveEntryIndicators(mood?: unknown, weather?: unknown) {
+  const safeMood = sanitizeEntryMood(mood);
+  const safeWeather = sanitizeEntryWeather(weather);
+
   return {
-    moodDisplay: mood && mood !== 'neutral' ? getArchiveMoodDisplay(mood) : null,
-    weatherDisplay: weather && weather !== 'unknown' ? getArchiveWeatherDisplay(weather) : null,
+    moodDisplay: safeMood !== 'neutral' ? getArchiveMoodDisplay(safeMood) : null,
+    weatherDisplay: safeWeather !== 'unknown' ? getArchiveWeatherDisplay(safeWeather) : null,
   };
 }

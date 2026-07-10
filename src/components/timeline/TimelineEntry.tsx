@@ -4,6 +4,17 @@ import { LazyMarkdownRenderer } from '../LazyMarkdownRenderer';
 import { useThemeContext } from '../ThemeProvider';
 import { formatFullDateTime, getSmartTimeDisplay } from '../../utils/timeUtils.ts';
 import { buildHighlightedExcerpt, highlightText } from '../../utils/searchHighlight.tsx';
+import { getDiaryEntryDomId, hasPersistedDiaryEntryId } from '../../utils/diaryEntryIdentity.ts';
+import {
+  sanitizeEntryContent,
+  sanitizeEntryContentType,
+  sanitizeEntryHidden,
+  sanitizeEntryMood,
+  sanitizeEntryTags,
+  sanitizeEntryTitle,
+  sanitizeEntryWeather,
+} from '../../utils/entryTextValidation.ts';
+import { getRenderableEntryImages } from '../entry/entryImages';
 import {
   EntryExcerptBlock,
   EntryImageGrid,
@@ -46,21 +57,28 @@ export function TimelineEntry({
   onLocationClick,
 }: TimelineEntryProps) {
   const { theme } = useThemeContext();
-  const timeDisplay = getSmartTimeDisplay(entry.created_at!);
-  const mood = entry.mood || 'neutral';
-  const weather = entry.weather || 'unknown';
+  const timeDisplay = getSmartTimeDisplay(entry.created_at);
+  const mood = sanitizeEntryMood(entry.mood);
+  const weather = sanitizeEntryWeather(entry.weather);
+  const contentType = sanitizeEntryContentType(entry.content_type);
+  const isHidden = sanitizeEntryHidden(entry.hidden);
   const moodEmoji = getEntryMoodEmoji(mood);
   const weatherIcon = getEntryWeatherIcon(weather);
   const moodLabel = getEntryMoodLabel(mood);
   const weatherLabel = getEntryWeatherLabel(weather);
-  const highlightedExcerpt = buildHighlightedExcerpt(entry.content, searchQuery);
+  const entryTitle = sanitizeEntryTitle(entry.title);
+  const entryContent = sanitizeEntryContent(entry.content);
+  const highlightedExcerpt = buildHighlightedExcerpt(entryContent, searchQuery);
   const entryTextClassName = `whitespace-pre-wrap leading-8 ${isMobile ? 'text-sm' : 'text-base'}`;
+  const renderableImages = getRenderableEntryImages(entry.images);
+  const entryTags = sanitizeEntryTags(entry.tags);
   const moodText = isMobile ? moodLabel : `心情 ${moodLabel}`;
   const weatherText = isMobile ? weatherLabel : `天气 ${weatherLabel}`;
+  const canEdit = Boolean(onEdit && isAdminAuthenticated && hasPersistedDiaryEntryId(entry));
 
   return (
     <div
-      className={`timeline-entry-shell relative ${entry.content_type === 'markdown' ? 'rich-content-entry' : ''}`}
+      className={`timeline-entry-shell relative ${contentType === 'markdown' ? 'rich-content-entry' : ''}`}
       onClick={() => onPreview?.(entry)}
     >
       <div
@@ -75,7 +93,7 @@ export function TimelineEntry({
       />
 
       <div
-        id={entry.id ? `entry-${entry.id}` : undefined}
+        id={getDiaryEntryDomId(entry)}
         className={`${isMobile ? 'ml-10' : 'ml-16'} relative transition-shadow transition-colors duration-300 ${isMobile ? 'pb-8' : 'pb-12'} ${isHighlighted ? 'ring-highlight rounded-[1.4rem] px-4 pt-3' : ''}`}
         style={{
           backgroundColor: isHighlighted
@@ -100,12 +118,12 @@ export function TimelineEntry({
             <span>{timeDisplay.relative}</span>
           </div>
 
-          {onEdit && isAdminAuthenticated && (
+          {canEdit && (
             <button
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
-                onEdit(entry);
+                onEdit?.(entry);
               }}
               className="rounded-full p-1.5 opacity-60 transition-all duration-200 hover:scale-110 hover:opacity-100"
               style={{
@@ -122,9 +140,9 @@ export function TimelineEntry({
         {entry.title && entry.title !== '无标题' && (
           <EntryTitleBlock
             theme={theme}
-            title={highlightText(entry.title, searchQuery)}
-            subtitle={<>记录于 {formatFullDateTime(entry.created_at!)}</>}
-            hiddenLabel={entry.hidden ? '隐藏' : null}
+            title={highlightText(entryTitle, searchQuery)}
+            subtitle={<>记录于 {formatFullDateTime(entry.created_at)}</>}
+            hiddenLabel={isHidden ? '隐藏' : null}
             isMobile={isMobile}
             timeline
           />
@@ -137,8 +155,8 @@ export function TimelineEntry({
         )}
 
         <div className={isMobile ? 'mb-3' : 'mb-4'}>
-          {entry.content_type === 'markdown' ? (
-            <LazyMarkdownRenderer content={entry.content} />
+          {contentType === 'markdown' ? (
+            <LazyMarkdownRenderer content={entryContent} />
           ) : (
             <div
               className={entryTextClassName}
@@ -146,26 +164,26 @@ export function TimelineEntry({
                 color: theme.colors.text,
               }}
             >
-              {entry.content}
+              {entryContent}
             </div>
           )}
         </div>
 
-        {entry.images && entry.images.length > 0 && (
+        {renderableImages.length > 0 && (
           <div className={isMobile ? 'mb-3' : 'mb-4'}>
             <EntryImageGrid
               theme={theme}
-              images={entry.images}
+              images={renderableImages}
               isMobile={isMobile}
-              onImageClick={(index) => onImageClick(entry.images!, index)}
+              onImageClick={(index) => onImageClick(renderableImages, index)}
               previewLabel="点击查看"
             />
           </div>
         )}
 
-        {entry.tags && entry.tags.length > 0 && (
+        {entryTags.length > 0 && (
           <div className={isMobile ? 'mb-3' : 'mb-4'}>
-            <EntryTagList theme={theme} tags={entry.tags} isMobile={isMobile} />
+            <EntryTagList theme={theme} tags={entryTags} isMobile={isMobile} />
           </div>
         )}
 

@@ -1,10 +1,34 @@
-import type { ApiResponse, DiaryEntry, LocationDetails, LocationInfo, POI } from '../../src/types/index.ts';
+import type {
+  ApiResponse,
+  DiaryEntry,
+  LocationCoordinate,
+  LocationCoordinateOffset,
+  LocationDetails,
+  LocationHighAccuracyMeta,
+  LocationInfo,
+  POI,
+} from '../../src/types/index.ts';
 import {
   createPublicSettingsResponse,
   isPublicBooleanSettingKey,
   publicBooleanSettingKeys,
   publicBooleanSettingStorageDefaults,
 } from '../../src/services/publicSettingsSchema.ts';
+import {
+  isValidImageSource,
+  MAX_ENTRY_IMAGES_COUNT,
+  MAX_ENTRY_IMAGE_DATA_URL_LENGTH,
+  MAX_ENTRY_IMAGE_URL_LENGTH,
+} from '../../src/utils/imageSourceValidation.ts';
+import {
+  MAX_ENTRY_CONTENT_LENGTH,
+  MAX_ENTRY_MOOD_LENGTH,
+  MAX_ENTRY_TAG_LENGTH,
+  MAX_ENTRY_TAGS_COUNT,
+  MAX_ENTRY_TITLE_LENGTH,
+  MAX_ENTRY_WEATHER_LENGTH,
+} from '../../src/utils/entryTextValidation.ts';
+import { parseTimeString } from '../../src/utils/timestampUtils.ts';
 import type { PublicBooleanSettingKey } from '../../src/services/publicSettingsSchema.ts';
 
 export interface Env {
@@ -21,6 +45,8 @@ export interface Env {
   IMAGES_API_TOKEN?: string;
   IMAGES_DELIVERY_URL?: string;
   IMAGES_VARIANT?: string;
+  IMAGES_UPLOAD_TIMEOUT_MS?: string;
+  IMAGES_FILE_READ_TIMEOUT_MS?: string;
 }
 
 export type AuthScope = 'app' | 'admin';
@@ -44,18 +70,10 @@ export type SessionInfo = {
 
 const textEncoder = new TextEncoder();
 const SESSION_COOKIE_NAME = 'diary_session';
+const DEVELOPMENT_SESSION_SECRET = crypto.randomUUID();
 const PASSWORD_HASH_PREFIX = 'pbkdf2';
 const PASSWORD_HASH_ITERATIONS = 100000;
 const MAX_SUPPORTED_PASSWORD_HASH_ITERATIONS = 100000;
-const MAX_TITLE_LENGTH = 200;
-const MAX_CONTENT_LENGTH = 50000;
-const MAX_MOOD_LENGTH = 50;
-const MAX_WEATHER_LENGTH = 50;
-const MAX_IMAGES_COUNT = 20;
-const MAX_IMAGE_URL_LENGTH = 2048;
-const MAX_IMAGE_DATA_URL_LENGTH = 12 * 1024 * 1024;
-const MAX_TAGS_COUNT = 30;
-const MAX_TAG_LENGTH = 64;
 const MAX_LOCATION_JSON_LENGTH = 8192;
 const MIN_SYNC_TOKEN_LENGTH = 12;
 const MAX_SYNC_TOKEN_LENGTH = 256;
@@ -100,6 +118,24 @@ function toBase64Url(value: string | Uint8Array): string {
   }
 
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function isValidTimestampString(value: unknown): value is string {
+  return typeof value === 'string' && parseTimeString(value) !== null;
+}
+
+function isJsonContentType(value: string | null): boolean {
+  const mediaType = value?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+  return mediaType === 'application/json';
+}
+
+function parseContentLength(value: string | null): number | null {
+  if (!value || !/^\d+$/.test(value.trim())) {
+    return null;
+  }
+
+  const contentLength = Number(value);
+  return Number.isSafeInteger(contentLength) ? contentLength : null;
 }
 
 function fromBase64Url(value: string): Uint8Array {
@@ -152,7 +188,14 @@ function getSessionSecret(env: Env): string | null {
     return null;
   }
 
-  return env.ADMIN_BOOTSTRAP_PASSWORD?.trim() || 'local-dev-session-secret';
+  const bootstrapSecret = env.ADMIN_BOOTSTRAP_PASSWORD?.trim();
+  if (bootstrapSecret) {
+    console.warn('SESSION_SECRET 未配置，临时使用 ADMIN_BOOTSTRAP_PASSWORD 作为会话密钥。建议在生产环境显式配置 SESSION_SECRET。');
+    return bootstrapSecret;
+  }
+
+  console.warn('SESSION_SECRET 与 ADMIN_BOOTSTRAP_PASSWORD 均未配置，使用随机生成的临时会话密钥。该密钥在 Worker 冷启动后会变化，已登录会话将失效。');
+  return DEVELOPMENT_SESSION_SECRET;
 }
 
 function requireSessionSecret(env: Env): string {
@@ -214,11 +257,27 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= 0;
+}
+
+function isValidLatitude(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= -90 && value <= 90;
+}
+
+function isValidLongitude(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= -180 && value <= 180;
+}
+
+function isValidCoordinatePair(latitude: unknown, longitude: unknown): latitude is number {
+  return isValidLatitude(latitude) && isValidLongitude(longitude);
+}
+
 function isPoi(value: unknown): value is POI {
   return isRecord(value)
     && typeof value.name === 'string'
     && typeof value.type === 'string'
-    && isFiniteNumber(value.distance);
+    && isNonNegativeFiniteNumber(value.distance);
 }
 
 function isLocationDetails(value: unknown): value is LocationDetails {
@@ -236,6 +295,27 @@ function isLocationDetails(value: unknown): value is LocationDetails {
     && isOptionalString(value.country);
 }
 
+function isLocationCoordinate(value: unknown): value is LocationCoordinate {
+  return isRecord(value)
+    && isValidCoordinatePair(value.latitude, value.longitude);
+}
+
+function isLocationCoordinateOffset(value: unknown): value is LocationCoordinateOffset {
+  return isRecord(value)
+    && isValidCoordinatePair(value.latitude, value.longitude)
+    && isNonNegativeFiniteNumber(value.distance);
+}
+
+function isHighAccuracyMeta(value: unknown): value is LocationHighAccuracyMeta {
+  return isRecord(value)
+    && (value.accuracy === undefined || isNonNegativeFiniteNumber(value.accuracy))
+    && (value.confidence === 'high' || value.confidence === 'medium' || value.confidence === 'low')
+    && typeof value.attempts === 'number'
+    && Number.isInteger(value.attempts)
+    && value.attempts > 0
+    && (value.coordinateOffset === undefined || isLocationCoordinateOffset(value.coordinateOffset));
+}
+
 function isLocationInfo(value: unknown): value is LocationInfo {
   if (!isRecord(value)) {
     return false;
@@ -245,11 +325,14 @@ function isLocationInfo(value: unknown): value is LocationInfo {
   const details = value.details;
 
   return isOptionalString(value.name)
-    && (value.latitude === undefined || isFiniteNumber(value.latitude))
-    && (value.longitude === undefined || isFiniteNumber(value.longitude))
+    && (value.latitude === undefined || isValidLatitude(value.latitude))
+    && (value.longitude === undefined || isValidLongitude(value.longitude))
     && isOptionalString(value.address)
     && (nearbyPOIs === undefined || (Array.isArray(nearbyPOIs) && nearbyPOIs.every(isPoi)))
-    && (details === undefined || isLocationDetails(details));
+    && (details === undefined || isLocationDetails(details))
+    && (value.originalGPS === undefined || isLocationCoordinate(value.originalGPS))
+    && (value.coordinateOffset === undefined || isLocationCoordinateOffset(value.coordinateOffset))
+    && (value.highAccuracy === undefined || isHighAccuracyMeta(value.highAccuracy));
 }
 
 function parseStoredJson<T>(value: unknown, fallback: T): T {
@@ -587,9 +670,15 @@ export async function readSession(
   }
 
   try {
-    const payload = JSON.parse(new TextDecoder().decode(fromBase64Url(payloadBase64))) as SessionPayload;
+    const payload = JSON.parse(new TextDecoder().decode(fromBase64Url(payloadBase64))) as unknown;
 
-    if (payload.exp <= Date.now() || (payload.role !== 'app' && payload.role !== 'admin')) {
+    if (
+      !isRecord(payload)
+      || (payload.role !== 'app' && payload.role !== 'admin')
+      || typeof payload.exp !== 'number'
+      || !Number.isFinite(payload.exp)
+      || payload.exp <= Date.now()
+    ) {
       return { isAuthenticated: false, isAdminAuthenticated: false, role: null };
     }
 
@@ -742,15 +831,13 @@ export function normalizeEntryInput(
       return { error: '标题必须是字符串' };
     }
 
-    if (!allowPartial || input.title !== undefined) {
-      const title = typeof input.title === 'string' ? input.title.trim() || '无标题' : '无标题';
-      const titleError = validateMaxLength(title, MAX_TITLE_LENGTH, `标题长度不能超过 ${MAX_TITLE_LENGTH} 字符`);
-      if (titleError) {
-        return { error: titleError };
-      }
-
-      data.title = title;
+    const title = typeof input.title === 'string' ? input.title.trim() || '无标题' : '无标题';
+    const titleError = validateMaxLength(title, MAX_ENTRY_TITLE_LENGTH, `标题长度不能超过 ${MAX_ENTRY_TITLE_LENGTH} 字符`);
+    if (titleError) {
+      return { error: titleError };
     }
+
+    data.title = title;
   }
 
   if (input.content !== undefined) {
@@ -763,7 +850,7 @@ export function normalizeEntryInput(
       return { error: '日记内容不能为空' };
     }
 
-    const contentError = validateMaxLength(content, MAX_CONTENT_LENGTH, `内容长度不能超过 ${MAX_CONTENT_LENGTH} 字符`);
+    const contentError = validateMaxLength(content, MAX_ENTRY_CONTENT_LENGTH, `内容长度不能超过 ${MAX_ENTRY_CONTENT_LENGTH} 字符`);
     if (contentError) {
       return { error: contentError };
     }
@@ -780,9 +867,7 @@ export function normalizeEntryInput(
       return { error: '内容类型仅支持 markdown 或 plain' };
     }
 
-    if (!allowPartial || input.content_type !== undefined) {
-      data.content_type = (input.content_type as 'markdown' | 'plain' | undefined) ?? 'markdown';
-    }
+    data.content_type = (input.content_type as 'markdown' | 'plain' | undefined) ?? 'markdown';
   }
 
   if (!allowPartial || input.mood !== undefined) {
@@ -790,15 +875,13 @@ export function normalizeEntryInput(
       return { error: '心情必须是字符串' };
     }
 
-    if (!allowPartial || input.mood !== undefined) {
-      const mood = typeof input.mood === 'string' ? input.mood : 'neutral';
-      const moodError = validateMaxLength(mood, MAX_MOOD_LENGTH, `心情长度不能超过 ${MAX_MOOD_LENGTH} 字符`);
-      if (moodError) {
-        return { error: moodError };
-      }
-
-      data.mood = mood;
+    const mood = typeof input.mood === 'string' ? input.mood : 'neutral';
+    const moodError = validateMaxLength(mood, MAX_ENTRY_MOOD_LENGTH, `心情长度不能超过 ${MAX_ENTRY_MOOD_LENGTH} 字符`);
+    if (moodError) {
+      return { error: moodError };
     }
+
+    data.mood = mood;
   }
 
   if (!allowPartial || input.weather !== undefined) {
@@ -806,15 +889,13 @@ export function normalizeEntryInput(
       return { error: '天气必须是字符串' };
     }
 
-    if (!allowPartial || input.weather !== undefined) {
-      const weather = typeof input.weather === 'string' ? input.weather : 'unknown';
-      const weatherError = validateMaxLength(weather, MAX_WEATHER_LENGTH, `天气长度不能超过 ${MAX_WEATHER_LENGTH} 字符`);
-      if (weatherError) {
-        return { error: weatherError };
-      }
-
-      data.weather = weather;
+    const weather = typeof input.weather === 'string' ? input.weather : 'unknown';
+    const weatherError = validateMaxLength(weather, MAX_ENTRY_WEATHER_LENGTH, `天气长度不能超过 ${MAX_ENTRY_WEATHER_LENGTH} 字符`);
+    if (weatherError) {
+      return { error: weatherError };
     }
+
+    data.weather = weather;
   }
 
   if (!allowPartial || input.images !== undefined) {
@@ -823,21 +904,29 @@ export function normalizeEntryInput(
         return { error: '图片列表必须是字符串数组' };
       }
 
-      if (input.images.length > MAX_IMAGES_COUNT) {
-        return { error: `图片数量不能超过 ${MAX_IMAGES_COUNT} 张` };
+      if (input.images.length > MAX_ENTRY_IMAGES_COUNT) {
+        return { error: `图片数量不能超过 ${MAX_ENTRY_IMAGES_COUNT} 张` };
       }
 
       for (const item of input.images) {
         if (isImageDataUrl(item)) {
-          if (item.length > MAX_IMAGE_DATA_URL_LENGTH) {
-            return { error: `base64 图片长度不能超过 ${MAX_IMAGE_DATA_URL_LENGTH} 字符` };
+          if (item.length > MAX_ENTRY_IMAGE_DATA_URL_LENGTH) {
+            return { error: `base64 图片长度不能超过 ${MAX_ENTRY_IMAGE_DATA_URL_LENGTH} 字符` };
+          }
+
+          if (!isValidImageSource(item)) {
+            return { error: '图片地址格式无效' };
           }
 
           continue;
         }
 
-        if (item.length > MAX_IMAGE_URL_LENGTH) {
-          return { error: `图片地址长度不能超过 ${MAX_IMAGE_URL_LENGTH} 字符` };
+        if (item.length > MAX_ENTRY_IMAGE_URL_LENGTH) {
+          return { error: `图片地址长度不能超过 ${MAX_ENTRY_IMAGE_URL_LENGTH} 字符` };
+        }
+
+        if (!isValidImageSource(item)) {
+          return { error: '图片地址格式无效' };
         }
       }
 
@@ -853,12 +942,12 @@ export function normalizeEntryInput(
         return { error: '标签列表必须是字符串数组' };
       }
 
-      if (input.tags.length > MAX_TAGS_COUNT) {
-        return { error: `标签数量不能超过 ${MAX_TAGS_COUNT} 个` };
+      if (input.tags.length > MAX_ENTRY_TAGS_COUNT) {
+        return { error: `标签数量不能超过 ${MAX_ENTRY_TAGS_COUNT} 个` };
       }
 
-      if (input.tags.some((item) => item.length > MAX_TAG_LENGTH)) {
-        return { error: `单个标签长度不能超过 ${MAX_TAG_LENGTH} 字符` };
+      if (input.tags.some((item) => item.length > MAX_ENTRY_TAG_LENGTH)) {
+        return { error: `单个标签长度不能超过 ${MAX_ENTRY_TAG_LENGTH} 字符` };
       }
 
       data.tags = JSON.stringify(input.tags);
@@ -893,13 +982,11 @@ export function normalizeEntryInput(
       return { error: '隐藏状态必须是布尔值' };
     }
 
-    if (!allowPartial || input.hidden !== undefined) {
-      data.hidden = input.hidden ? 1 : 0;
-    }
+    data.hidden = input.hidden ? 1 : 0;
   }
 
   if (includeCreatedAt && input.created_at !== undefined) {
-    if (typeof input.created_at !== 'string' || Number.isNaN(Date.parse(input.created_at))) {
+    if (!isValidTimestampString(input.created_at)) {
       return { error: '创建时间格式无效' };
     }
 
@@ -909,7 +996,7 @@ export function normalizeEntryInput(
   }
 
   if (includeUpdatedAt && input.updated_at !== undefined) {
-    if (typeof input.updated_at !== 'string' || Number.isNaN(Date.parse(input.updated_at))) {
+    if (!isValidTimestampString(input.updated_at)) {
       return { error: '更新时间格式无效' };
     }
 
@@ -922,7 +1009,11 @@ export function normalizeEntryInput(
 }
 
 export function parseEntryId(value: string): number | null {
-  const id = Number.parseInt(value, 10);
+  if (!/^\d+$/.test(value)) {
+    return null;
+  }
+
+  const id = Number(value);
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
@@ -960,11 +1051,20 @@ export async function parseJsonBody<T>(
   } = {}
 ): Promise<{ data?: T; error?: string; status?: number }> {
   if (options.requireJsonContentType) {
-    const contentType = request.headers.get('Content-Type')?.toLowerCase() ?? '';
-    if (!contentType.includes('application/json')) {
+    if (!isJsonContentType(request.headers.get('Content-Type'))) {
       return {
         error: '请求 Content-Type 必须为 application/json',
         status: 415,
+      };
+    }
+  }
+
+  if (options.maxBodyBytes != null) {
+    const contentLength = parseContentLength(request.headers.get('Content-Length'));
+    if (contentLength != null && contentLength > options.maxBodyBytes) {
+      return {
+        error: `请求体超过大小限制（最大 ${options.maxBodyBytes} 字节）`,
+        status: 413,
       };
     }
   }

@@ -6,11 +6,16 @@ import { apiService } from '../services/api';
 import { useNotificationState } from '../hooks/useNotificationState';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { debugError } from '../utils/logger.ts';
+import { getRenderableEntryImages } from './entry/entryImages';
 
 interface ImageUploadProps {
   images: string[];
   onImagesChange: (images: string[]) => void;
   maxImages?: number;
+}
+
+function isImageFileType(file: File) {
+  return file.type.trim().toLowerCase().startsWith('image/');
 }
 
 export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUploadProps) {
@@ -21,16 +26,25 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
   const [dragOver, setDragOver] = useState(false);
   const { hideNotification, notification, showNotification } = useNotificationState();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const renderableImages = getRenderableEntryImages(images);
 
   const handleFileSelect = useCallback(async (files: FileList) => {
-    if (images.length >= maxImages) {
+    if (uploading) {
+      return;
+    }
+
+    if (renderableImages.length >= maxImages) {
       showNotification(`最多只能上传 ${maxImages} 张图片`, 'error');
       return;
     }
 
     const validFiles = Array.from(files).filter(file => {
-      if (!file.type.startsWith('image/')) {
+      if (!isImageFileType(file)) {
         showNotification(`${file.name} 不是有效的图片文件`, 'error');
+        return false;
+      }
+      if (file.size <= 0) {
+        showNotification(`${file.name} 文件为空`, 'error');
         return false;
       }
       if (file.size > 5 * 1024 * 1024) {
@@ -42,8 +56,12 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
 
     if (validFiles.length === 0) return;
 
-    const remainingSlots = maxImages - images.length;
+    const remainingSlots = maxImages - renderableImages.length;
     const filesToUpload = validFiles.slice(0, remainingSlots);
+
+    if (validFiles.length > remainingSlots) {
+      showNotification(`最多还能上传 ${remainingSlots} 张图片，已只处理前 ${remainingSlots} 张`, 'error');
+    }
 
     setUploading(true);
     setUploadProgress({ current: 0, total: filesToUpload.length });
@@ -67,7 +85,7 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
         }
       }
 
-      onImagesChange([...images, ...uploadedUrls]);
+      onImagesChange(getRenderableEntryImages([...renderableImages, ...uploadedUrls]));
       if (embeddedUploadWarnings.length > 0) {
         const firstWarning = embeddedUploadWarnings[0];
         showNotification(`已保存 ${uploadedUrls.length} 张图片，但未同步到 R2：${firstWarning}`, 'error');
@@ -83,7 +101,7 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
       setUploading(false);
       setUploadProgress(null);
     }
-  }, [images, maxImages, onImagesChange]);
+  }, [maxImages, onImagesChange, renderableImages, uploading]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -102,12 +120,25 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
   }, []);
 
   const removeImage = (index: number) => {
-    const newImages = images.filter((_, i) => i !== index);
+    const newImages = renderableImages.filter((_, i) => i !== index);
     onImagesChange(newImages);
   };
 
   const openFileDialog = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const selectedFiles = input.files;
+
+    if (!selectedFiles) {
+      return;
+    }
+
+    void handleFileSelect(selectedFiles).finally(() => {
+      input.value = '';
+    });
   };
 
   return (
@@ -134,7 +165,7 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
           multiple
           accept="image/*"
           className="hidden"
-          onChange={(e) => e.target.files && handleFileSelect(e.target.files)}
+          onChange={handleInputChange}
         />
 
         {uploading ? (
@@ -154,17 +185,17 @@ export function ImageUpload({ images, onImagesChange, maxImages = 5 }: ImageUplo
               支持 JPG、PNG、GIF 格式，单个文件不超过 5MB，上传时会自动压缩
             </p>
             <p className="text-xs mt-1" style={{ color: theme.colors.textSecondary }}>
-              已上传 {images.length}/{maxImages} 张
+              已上传 {renderableImages.length}/{maxImages} 张
             </p>
           </div>
         )}
       </div>
 
       {/* 图片预览 */}
-      {images.length > 0 && (
+      {renderableImages.length > 0 && (
         <div className={`grid ${isMobile ? 'grid-cols-2 gap-3' : 'grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4'}`}>
-          {images.map((imageUrl, index) => (
-            <div key={index} className="relative group">
+          {renderableImages.map((imageUrl, index) => (
+            <div key={`${imageUrl}-${index}`} className="relative group">
               <div 
                 className="aspect-square rounded-lg overflow-hidden border"
                 style={{ borderColor: theme.colors.border }}

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 
 import { onRequestPost as syncEntries } from '../functions/api/sync.ts';
 import { createSessionToken } from '../functions/api/_shared.ts';
+import { parseTimeString } from '../src/utils/timestampUtils.ts';
+import type { Env } from '../functions/api/_shared.ts';
 
 type EntryRow = {
   id: number;
@@ -20,6 +22,10 @@ type EntryRow = {
   tags: string;
   hidden: number;
 };
+
+function getTestTimestamp(value: string | null | undefined) {
+  return parseTimeString(value)?.getTime() ?? Number.NEGATIVE_INFINITY;
+}
 
 class MockPreparedStatement {
   private readonly db: MockD1Database;
@@ -76,19 +82,19 @@ class MockD1Database {
       return [...this.entries]
         .filter((entry) => entry.deleted_at == null)
         .sort((left, right) =>
-        new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+          getTestTimestamp(right.created_at) - getTestTimestamp(left.created_at)
         );
     }
 
     if (normalized.startsWith('SELECT * FROM diary_entries WHERE unixepoch(COALESCE(deleted_at, updated_at)) >= unixepoch(?)')) {
-      const since = Date.parse(String(args[0]));
+      const since = getTestTimestamp(String(args[0]));
       return [...this.entries]
         .filter((entry) => {
-          const comparable = Date.parse(entry.deleted_at ?? entry.updated_at);
-          return !Number.isNaN(comparable) && comparable >= since;
+          const comparable = getTestTimestamp(entry.deleted_at ?? entry.updated_at);
+          return comparable >= since;
         })
         .sort((left, right) =>
-          Date.parse(right.deleted_at ?? right.updated_at) - Date.parse(left.deleted_at ?? left.updated_at)
+          getTestTimestamp(right.deleted_at ?? right.updated_at) - getTestTimestamp(left.deleted_at ?? left.updated_at)
         );
     }
 
@@ -190,7 +196,7 @@ class MockD1Database {
   }
 }
 
-async function buildAdminCookie(env: any) {
+async function buildAdminCookie(env: Env) {
   const token = await createSessionToken('admin', env);
   return `diary_session=${encodeURIComponent(token)}`;
 }
@@ -279,6 +285,117 @@ test('sync endpoint upserts newer entries and returns full remote snapshot', asy
   assert.equal(payload.data.entries[1]?.title, '新标题');
 });
 
+test('sync endpoint rejects malformed sync entries before writing', async () => {
+  const invalidEntries: Array<{ name: string; entry: unknown; error: RegExp }> = [
+    {
+      name: 'non-object entry',
+      entry: null,
+      error: /请求体格式无效/,
+    },
+    {
+      name: 'missing entry uuid',
+      entry: {
+        title: '缺少同步标识',
+        content: '内容',
+        created_at: '2026-04-18T10:00:00.000Z',
+        updated_at: '2026-04-18T10:00:00.000Z',
+      },
+      error: /同步标识格式无效/,
+    },
+    {
+      name: 'blank entry uuid',
+      entry: {
+        entry_uuid: '   ',
+        title: '空白同步标识',
+        content: '内容',
+        created_at: '2026-04-18T10:00:00.000Z',
+        updated_at: '2026-04-18T10:00:00.000Z',
+      },
+      error: /同步标识格式无效/,
+    },
+    {
+      name: 'missing created timestamp',
+      entry: {
+        entry_uuid: 'missing-created',
+        title: '缺少创建时间',
+        content: '内容',
+        updated_at: '2026-04-18T10:00:00.000Z',
+      },
+      error: /创建时间格式无效/,
+    },
+    {
+      name: 'invalid updated timestamp',
+      entry: {
+        entry_uuid: 'invalid-updated',
+        title: '坏更新时间',
+        content: '内容',
+        created_at: '2026-04-18T10:00:00.000Z',
+        updated_at: 'not-a-date',
+      },
+      error: /更新时间格式无效/,
+    },
+    {
+      name: 'invalid deleted timestamp',
+      entry: {
+        entry_uuid: 'existing-entry',
+        title: '坏删除时间',
+        content: '内容',
+        created_at: '2026-04-18T10:00:00.000Z',
+        updated_at: '2026-04-18T10:00:00.000Z',
+        deleted_at: 'not-a-date',
+      },
+      error: /删除时间格式无效/,
+    },
+  ];
+
+  for (const invalidEntry of invalidEntries) {
+    const env = createEnv([
+      {
+        id: 1,
+        entry_uuid: 'existing-entry',
+        title: '原内容',
+        content: '原始内容',
+        content_type: 'markdown',
+        mood: 'neutral',
+        weather: 'unknown',
+        images: '[]',
+        location: null,
+        created_at: '2026-04-18T08:00:00.000Z',
+        updated_at: '2026-04-18T08:00:00.000Z',
+        deleted_at: null,
+        tags: '[]',
+        hidden: 0,
+      },
+    ]);
+    const adminCookie = await buildAdminCookie(env);
+
+    const response = await syncEntries({
+      request: new Request('https://example.com/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: adminCookie,
+        },
+        body: JSON.stringify({
+          entries: [invalidEntry.entry],
+        }),
+      }),
+      env,
+    });
+
+    assert.equal(response.status, 400, invalidEntry.name);
+    const payload = await parseJson<{ success: boolean; error: string }>(response);
+    assert.equal(payload.success, false, invalidEntry.name);
+    assert.match(payload.error, /第 1 条同步数据无效/, invalidEntry.name);
+    assert.match(payload.error, invalidEntry.error, invalidEntry.name);
+
+    const db = env.DB as unknown as MockD1Database;
+    assert.equal(db.entries.length, 1, invalidEntry.name);
+    assert.equal(db.entries[0]?.title, '原内容', invalidEntry.name);
+    assert.equal(db.entries[0]?.deleted_at, null, invalidEntry.name);
+  }
+});
+
 test('sync endpoint deletes remote entries for pending_delete payloads', async () => {
   const env = createEnv([
     {
@@ -337,6 +454,67 @@ test('sync endpoint deletes remote entries for pending_delete payloads', async (
   assert.equal(payload.data.deletedCount, 1);
   assert.deepEqual(payload.data.confirmedEntryUuids, ['delete-entry']);
   assert.equal(payload.data.entries.length, 0);
+});
+
+test('sync endpoint uses deleted_at as the deletion timestamp when it is newer than updated_at', async () => {
+  const env = createEnv([
+    {
+      id: 1,
+      entry_uuid: 'delete-with-newer-deleted-at',
+      title: '待删除',
+      content: '旧内容',
+      content_type: 'markdown',
+      mood: 'neutral',
+      weather: 'unknown',
+      images: '[]',
+      location: null,
+      created_at: '2026-04-18T08:00:00.000Z',
+      updated_at: '2026-04-18T10:00:00.000Z',
+      deleted_at: null,
+      tags: '[]',
+      hidden: 0,
+    },
+  ]);
+  const adminCookie = await buildAdminCookie(env);
+
+  const response = await syncEntries({
+    request: new Request('https://example.com/api/sync', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: adminCookie,
+      },
+      body: JSON.stringify({
+        entries: [
+          {
+            entry_uuid: 'delete-with-newer-deleted-at',
+            title: '待删除',
+            content: '旧内容',
+            created_at: '2026-04-18T08:00:00.000Z',
+            updated_at: '2026-04-18T09:00:00.000Z',
+            deleted_at: '2026-04-18T12:00:00.000Z',
+          },
+        ],
+      }),
+    }),
+    env,
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await parseJson<{
+    success: boolean;
+    data: {
+      deletedCount: number;
+      confirmedEntryUuids: string[];
+    };
+  }>(response);
+  assert.equal(payload.success, true);
+  assert.equal(payload.data.deletedCount, 1);
+  assert.deepEqual(payload.data.confirmedEntryUuids, ['delete-with-newer-deleted-at']);
+
+  const db = env.DB as unknown as MockD1Database;
+  assert.equal(db.entries[0]?.deleted_at, '2026-04-18T12:00:00.000Z');
+  assert.equal(db.entries[0]?.updated_at, '2026-04-18T12:00:00.000Z');
 });
 
 test('sync endpoint accepts sync token header for apk cross-origin sync', async () => {
@@ -411,7 +589,7 @@ test('sync endpoint returns incremental changes when lastSyncedAt is provided', 
       images: '[]',
       location: null,
       created_at: '2026-04-18T09:00:00.000Z',
-      updated_at: '2026-04-18T11:00:00.000Z',
+      updated_at: '2026-04-18 11:00:00',
       deleted_at: null,
       tags: '[]',
       hidden: 0,
@@ -428,7 +606,7 @@ test('sync endpoint returns incremental changes when lastSyncedAt is provided', 
       },
       body: JSON.stringify({
         entries: [],
-        lastSyncedAt: '2026-04-18T10:00:00.000Z',
+        lastSyncedAt: ' 2026-04-18 10:00:00 ',
       }),
     }),
     env,
@@ -439,4 +617,31 @@ test('sync endpoint returns incremental changes when lastSyncedAt is provided', 
   assert.equal(payload.success, true);
   assert.equal(payload.data.entries.length, 1);
   assert.equal(payload.data.entries[0]?.entry_uuid, 'newer-entry');
+});
+
+test('sync endpoint rejects malformed lastSyncedAt cursors', async () => {
+  const env = createEnv();
+  const adminCookie = await buildAdminCookie(env);
+
+  for (const lastSyncedAt of ['not-a-date', 123]) {
+    const response = await syncEntries({
+      request: new Request('https://example.com/api/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: adminCookie,
+        },
+        body: JSON.stringify({
+          entries: [],
+          lastSyncedAt,
+        }),
+      }),
+      env,
+    });
+
+    assert.equal(response.status, 400);
+    const payload = await parseJson<{ success: boolean; error: string }>(response);
+    assert.equal(payload.success, false);
+    assert.match(payload.error, /lastSyncedAt/);
+  }
 });

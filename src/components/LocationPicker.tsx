@@ -6,10 +6,14 @@ import { LOCATION_CONFIG, isAmapConfigured } from '../config/location';
 import { getDetailedLocationInfo } from './map/locationPickerGeocoding';
 import { createSmartOfflineLocation } from './map/locationPickerOffline';
 import { debugError, debugLog } from '../utils/logger.ts';
+import { formatMeters, formatPositiveIntegerCount } from '../utils/numberFormat.ts';
+import { isValidCoordinatePair, isValidLatitude, isValidLongitude } from '../utils/geoCoordinates.ts';
 
 const MapLocationPicker = lazy(() =>
   import('./MapLocationPicker').then((module) => ({ default: module.MapLocationPicker }))
 );
+
+const QUICK_LOCATION_TIMEOUT_MS = 12_000;
 
 interface LocationPickerProps {
   location: LocationInfo | null;
@@ -17,9 +21,93 @@ interface LocationPickerProps {
   disabled?: boolean;
 }
 
+function getFiniteLocationCoordinates(location: LocationInfo | null) {
+  const latitude = location?.latitude;
+  const longitude = location?.longitude;
+
+  if (!isValidLatitude(latitude) || !isValidLongitude(longitude)) {
+    return null;
+  }
+
+  return {
+    latitude,
+    longitude,
+  };
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function isGeolocationError(error: unknown): error is GeolocationPositionError {
+  return typeof error === 'object'
+    && error !== null
+    && typeof (error as { code?: unknown }).code === 'number';
+}
+
+function createAbortError() {
+  return new DOMException('定位已取消', 'AbortError');
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+}
+
+function getCurrentPositionWithTimeout(
+  geolocation: Geolocation,
+  options: PositionOptions,
+  timeoutMs: number,
+  signal?: AbortSignal
+) {
+  throwIfAborted(signal);
+
+  return new Promise<GeolocationPosition>((resolve, reject) => {
+    let settled = false;
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', handleAbort);
+    };
+
+    const settle = (callback: () => void) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      callback();
+    };
+
+    const handleAbort = () => {
+      settle(() => reject(createAbortError()));
+    };
+
+    const timeoutId = setTimeout(() => {
+      settle(() => reject(new Error('获取位置超时')));
+    }, timeoutMs);
+
+    signal?.addEventListener('abort', handleAbort, { once: true });
+
+    try {
+      geolocation.getCurrentPosition(
+        (position) => settle(() => resolve(position)),
+        (error) => settle(() => reject(error)),
+        options
+      );
+    } catch (error) {
+      settle(() => reject(error));
+    }
+  });
+}
+
 export function LocationPicker({ location, onLocationChange, disabled }: LocationPickerProps) {
   const { theme } = useThemeContext();
   const hasAmapMapSupport = isAmapConfigured() && LOCATION_CONFIG.ENABLE_AMAP;
+  const highAccuracyMeta = location?.highAccuracy;
+  const finiteCoordinates = getFiniteLocationCoordinates(location);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [manualLocation, setManualLocation] = useState('');
@@ -27,6 +115,8 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [mapPickerRequested, setMapPickerRequested] = useState(false);
   const errorResetTimeoutRef = useRef<number | null>(null);
+  const quickLocationAbortControllerRef = useRef<AbortController | null>(null);
+  const highAccuracyAbortControllerRef = useRef<AbortController | null>(null);
 
   const scheduleLocationErrorReset = (delayMs: number) => {
     if (errorResetTimeoutRef.current !== null) {
@@ -44,11 +134,15 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
       if (errorResetTimeoutRef.current !== null) {
         window.clearTimeout(errorResetTimeoutRef.current);
       }
+      quickLocationAbortControllerRef.current?.abort();
+      highAccuracyAbortControllerRef.current?.abort();
     };
   }, []);
 
   // 获取当前位置
   const getCurrentLocation = async () => {
+    if (isGettingLocation) return;
+
     if (!navigator.geolocation) {
       setLocationError('浏览器不支持地理定位');
       return;
@@ -56,17 +150,31 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
 
     setIsGettingLocation(true);
     setLocationError(null);
+    quickLocationAbortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    quickLocationAbortControllerRef.current = abortController;
 
     try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
+      const position = await getCurrentPositionWithTimeout(
+        navigator.geolocation,
+        {
           enableHighAccuracy: true,
           timeout: 10000,
           maximumAge: 300000 // 5分钟缓存
-        });
-      });
+        },
+        QUICK_LOCATION_TIMEOUT_MS,
+        abortController.signal
+      );
+
+      if (abortController.signal.aborted) {
+        return;
+      }
 
       const { latitude, longitude, accuracy } = position.coords;
+      if (!isValidCoordinatePair(latitude, longitude)) {
+        setLocationError('定位返回的坐标无效，请重试');
+        return;
+      }
 
       // 🔧 坐标系转换：GPS(WGS84) -> 高德地图(GCJ02)
       const { wgs84ToGcj02 } = await import('../utils/coordinateUtils');
@@ -78,25 +186,35 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
       debugLog('📍 GPS定位成功 (LocationPicker):');
       debugLog('  原始GPS坐标 (WGS84):', { latitude, longitude });
       debugLog('  转换后坐标 (GCJ02):', { latitude: convertedLat, longitude: convertedLng });
-      debugLog('  坐标偏移距离:', `${gcj02Result.offset?.distance.toFixed(1)}米`);
-      debugLog('  GPS精度:', accuracy ? `${accuracy.toFixed(1)}米` : '未知');
+      debugLog('  坐标偏移距离:', formatMeters(gcj02Result.offset?.distance));
+      debugLog('  GPS精度:', formatMeters(accuracy));
 
       // 获取详细的位置信息 (使用转换后的坐标)
       try {
         const locationInfo = await getDetailedLocationInfo(convertedLat, convertedLng);
-        // 保存原始GPS坐标用于调试
-        (locationInfo as any).originalGPS = { latitude, longitude };
-        (locationInfo as any).coordinateOffset = gcj02Result.offset;
-        onLocationChange(locationInfo);
+        if (abortController.signal.aborted) {
+          return;
+        }
+
+        onLocationChange({
+          ...locationInfo,
+          originalGPS: { latitude, longitude },
+          coordinateOffset: gcj02Result.offset,
+        });
       } catch (geocodeError) {
         debugError('地理编码失败，使用坐标作为位置名称:', geocodeError);
 
         // 提供离线模式的基本位置信息 (使用转换后的坐标)
         const offlineLocationInfo = createSmartOfflineLocation(convertedLat, convertedLng);
-        // 保存原始GPS坐标用于调试
-        (offlineLocationInfo as any).originalGPS = { latitude, longitude };
-        (offlineLocationInfo as any).coordinateOffset = gcj02Result.offset;
-        onLocationChange(offlineLocationInfo);
+        if (abortController.signal.aborted) {
+          return;
+        }
+
+        onLocationChange({
+          ...offlineLocationInfo,
+          originalGPS: { latitude, longitude },
+          coordinateOffset: gcj02Result.offset,
+        });
 
         // 显示友好的成功信息，根据失败原因提供不同提示
         let message = '✅ 已智能识别位置信息！';
@@ -110,8 +228,12 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
         scheduleLocationErrorReset(6000);
       }
     } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
+
       let errorMessage = '获取位置失败';
-      if (error instanceof GeolocationPositionError) {
+      if (isGeolocationError(error)) {
         switch (error.code) {
           case error.PERMISSION_DENIED:
             errorMessage = '位置访问被拒绝，请在浏览器设置中允许位置访问';
@@ -123,10 +245,18 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
             errorMessage = '获取位置超时';
             break;
         }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
       }
       setLocationError(errorMessage);
     } finally {
-      setIsGettingLocation(false);
+      if (quickLocationAbortControllerRef.current === abortController) {
+        quickLocationAbortControllerRef.current = null;
+      }
+
+      if (!abortController.signal.aborted) {
+        setIsGettingLocation(false);
+      }
     }
   };
 
@@ -136,6 +266,9 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
 
     setIsGettingLocation(true);
     setLocationError(null);
+    highAccuracyAbortControllerRef.current?.abort();
+    const abortController = new AbortController();
+    highAccuracyAbortControllerRef.current = abortController;
 
     try {
       debugLog('🎯 开始高精度定位...');
@@ -146,10 +279,19 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
         maxAttempts: 3,
         timeout: 12000,
         acceptableAccuracy: 30, // 目标精度30米
-        targetSystem: 'GCJ02'
+        targetSystem: 'GCJ02',
+        signal: abortController.signal,
       });
 
+      if (abortController.signal.aborted) {
+        return;
+      }
+
       debugLog('🎯 高精度定位完成:', highAccuracyResult);
+      if (!isValidCoordinatePair(highAccuracyResult.latitude, highAccuracyResult.longitude)) {
+        setLocationError('高精度定位返回的坐标无效，请重试');
+        return;
+      }
 
       // 获取详细的位置信息
       try {
@@ -158,18 +300,22 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
           highAccuracyResult.longitude
         );
 
-        // 添加高精度定位的额外信息
-        (locationInfo as any).highAccuracy = {
-          accuracy: highAccuracyResult.accuracy,
-          confidence: highAccuracyResult.confidence,
-          attempts: highAccuracyResult.attempts,
-          coordinateOffset: highAccuracyResult.offset
-        };
+        if (abortController.signal.aborted) {
+          return;
+        }
 
-        onLocationChange(locationInfo);
+        onLocationChange({
+          ...locationInfo,
+          highAccuracy: {
+            accuracy: highAccuracyResult.accuracy,
+            confidence: highAccuracyResult.confidence,
+            attempts: highAccuracyResult.attempts,
+            coordinateOffset: highAccuracyResult.offset
+          }
+        });
 
         // 显示成功信息
-        const successMessage = `✅ 高精度定位成功！精度: ${highAccuracyResult.accuracy?.toFixed(1)}米，置信度: ${highAccuracyResult.confidence}`;
+        const successMessage = `✅ 高精度定位成功！精度: ${formatMeters(highAccuracyResult.accuracy)}，置信度: ${highAccuracyResult.confidence}`;
         setLocationError(successMessage);
         scheduleLocationErrorReset(8000);
 
@@ -182,25 +328,33 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
           highAccuracyResult.longitude
         );
 
-        // 添加高精度定位信息
-        (offlineLocationInfo as any).highAccuracy = {
-          accuracy: highAccuracyResult.accuracy,
-          confidence: highAccuracyResult.confidence,
-          attempts: highAccuracyResult.attempts,
-          coordinateOffset: highAccuracyResult.offset
-        };
+        if (abortController.signal.aborted) {
+          return;
+        }
 
-        onLocationChange(offlineLocationInfo);
+        onLocationChange({
+          ...offlineLocationInfo,
+          highAccuracy: {
+            accuracy: highAccuracyResult.accuracy,
+            confidence: highAccuracyResult.confidence,
+            attempts: highAccuracyResult.attempts,
+            coordinateOffset: highAccuracyResult.offset
+          }
+        });
 
-        const message = `✅ 高精度定位完成！精度: ${highAccuracyResult.accuracy?.toFixed(1)}米，使用离线模式识别位置。`;
+        const message = `✅ 高精度定位完成！精度: ${formatMeters(highAccuracyResult.accuracy)}，使用离线模式识别位置。`;
         setLocationError(message);
         scheduleLocationErrorReset(8000);
       }
 
     } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
+
       debugError('高精度定位失败:', error);
       let errorMessage = '高精度定位失败';
-      if (error instanceof GeolocationPositionError) {
+      if (isGeolocationError(error)) {
         switch (error.code) {
           case error.PERMISSION_DENIED:
             errorMessage = '位置访问被拒绝，请在浏览器设置中允许位置访问';
@@ -217,7 +371,13 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
       }
       setLocationError(errorMessage);
     } finally {
-      setIsGettingLocation(false);
+      if (highAccuracyAbortControllerRef.current === abortController) {
+        highAccuracyAbortControllerRef.current = null;
+      }
+
+      if (!abortController.signal.aborted) {
+        setIsGettingLocation(false);
+      }
     }
   };
 
@@ -285,9 +445,9 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
                     {location.address}
                   </div>
                 )}
-                {location.latitude && location.longitude && (
+                {finiteCoordinates && (
                   <div className="text-xs opacity-50" style={{ color: theme.colors.textSecondary }}>
-                    {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+                    {finiteCoordinates.latitude.toFixed(6)}, {finiteCoordinates.longitude.toFixed(6)}
                   </div>
                 )}
               </div>
@@ -317,7 +477,7 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
 
 
           {/* 高精度定位信息 */}
-          {(location as any)?.highAccuracy && (
+          {highAccuracyMeta && (
             <div
               className="p-3 rounded-lg border"
               style={{
@@ -333,29 +493,29 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
                 <div>
                   <span className="opacity-60" style={{ color: theme.colors.textSecondary }}>精度: </span>
                   <span style={{ color: theme.colors.text }}>
-                    {(location as any).highAccuracy.accuracy?.toFixed(1)}米
+                    {formatMeters(highAccuracyMeta.accuracy)}
                   </span>
                 </div>
                 <div>
                   <span className="opacity-60" style={{ color: theme.colors.textSecondary }}>置信度: </span>
                   <span style={{
-                    color: (location as any).highAccuracy.confidence === 'high' ? '#28a745' :
-                           (location as any).highAccuracy.confidence === 'medium' ? '#ffc107' : '#dc3545'
+                    color: highAccuracyMeta.confidence === 'high' ? '#28a745' :
+                           highAccuracyMeta.confidence === 'medium' ? '#ffc107' : '#dc3545'
                   }}>
-                    {(location as any).highAccuracy.confidence === 'high' ? '高' :
-                     (location as any).highAccuracy.confidence === 'medium' ? '中' : '低'}
+                    {highAccuracyMeta.confidence === 'high' ? '高' :
+                     highAccuracyMeta.confidence === 'medium' ? '中' : '低'}
                   </span>
                 </div>
                 <div>
                   <span className="opacity-60" style={{ color: theme.colors.textSecondary }}>定位次数: </span>
                   <span style={{ color: theme.colors.text }}>
-                    {(location as any).highAccuracy.attempts}次
+                    {formatPositiveIntegerCount(highAccuracyMeta.attempts, '次')}
                   </span>
                 </div>
                 <div>
                   <span className="opacity-60" style={{ color: theme.colors.textSecondary }}>坐标偏移: </span>
                   <span style={{ color: theme.colors.text }}>
-                    {(location as any).highAccuracy.coordinateOffset?.distance?.toFixed(1)}米
+                    {formatMeters(highAccuracyMeta.coordinateOffset?.distance)}
                   </span>
                 </div>
               </div>
@@ -566,7 +726,7 @@ export function LocationPicker({ location, onLocationChange, disabled }: Locatio
               onLocationChange(selectedLocation);
               setShowMapPicker(false);
             }}
-            initialLocation={location ? { lat: location.latitude!, lng: location.longitude! } : null}
+            initialLocation={finiteCoordinates ? { lat: finiteCoordinates.latitude, lng: finiteCoordinates.longitude } : null}
           />
         </Suspense>
       )}

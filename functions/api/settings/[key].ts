@@ -172,7 +172,16 @@ export const onRequestPut = async (context: { params: { key: string }; request: 
     }
 
     if (key === 'sync_access_token') {
-      const trimmedValue = validateSyncAccessToken(value);
+      let trimmedValue: string;
+      try {
+        trimmedValue = validateSyncAccessToken(value);
+      } catch (error) {
+        return jsonResponse<ApiResponse>({
+          success: false,
+          error: error instanceof Error ? error.message : '同步令牌格式无效',
+        }, { status: 400 });
+      }
+
       await setSyncAccessToken(context.env.DB, trimmedValue);
       return jsonResponse<ApiResponse>({
         success: true,

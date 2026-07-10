@@ -1,4 +1,5 @@
 import type { ApiResponse, DiaryStats } from '../../src/types/index.ts';
+import { parseTimeString } from '../../src/utils/timestampUtils.ts';
 import type { Env } from './_shared.ts';
 import { getAdminAccessStatus, jsonResponse, optionsResponse, readSession, timingSafeEqual } from './_shared.ts';
 
@@ -9,7 +10,19 @@ interface StatsEntry {
 const DEFAULT_STATS_TIME_ZONE = 'Asia/Shanghai';
 
 function getStatsTimeZone(env: Env): string {
-  return env.APP_TIMEZONE?.trim() || DEFAULT_STATS_TIME_ZONE;
+  const configured = env.APP_TIMEZONE?.trim();
+  if (!configured) {
+    return DEFAULT_STATS_TIME_ZONE;
+  }
+
+  try {
+    // 验证时区是否有效，无效时回退到默认值
+    new Intl.DateTimeFormat('en-US', { timeZone: configured }).format(new Date());
+    return configured;
+  } catch {
+    console.warn(`APP_TIMEZONE "${configured}" 无效，已回退到 ${DEFAULT_STATS_TIME_ZONE}`);
+    return DEFAULT_STATS_TIME_ZONE;
+  }
 }
 
 function formatDateKey(date: Date, timeZone: string): string {
@@ -32,16 +45,30 @@ function formatDateKey(date: Date, timeZone: string): string {
 }
 
 function toIsoDateKey(value: string | undefined, timeZone: string): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const date = parseTimeString(value);
+  if (!date) {
     return null;
   }
 
   return formatDateKey(date, timeZone);
+}
+
+function getEntryTimestamp(value: string | undefined): number | null {
+  return parseTimeString(value)?.getTime() ?? null;
+}
+
+function getValidStatsDateRange(entries: StatsEntry[]): {
+  latestEntryDate: string | null;
+  firstEntryDate: string | null;
+} {
+  const sortedEntries = [...entries]
+    .filter((entry) => getEntryTimestamp(entry.created_at) !== null)
+    .sort((left, right) => (getEntryTimestamp(right.created_at) ?? 0) - (getEntryTimestamp(left.created_at) ?? 0));
+
+  return {
+    latestEntryDate: sortedEntries[0]?.created_at ?? null,
+    firstEntryDate: sortedEntries[sortedEntries.length - 1]?.created_at ?? null,
+  };
 }
 
 function shiftDateKey(dateKey: string, days: number): string {
@@ -147,15 +174,14 @@ export const onRequestGet = async (context: { request: Request; env: Env }): Pro
     const { consecutive_days, current_streak_start } = calculateConsecutiveDays(entries, timeZone);
     const total_days_with_entries = calculateTotalDaysWithEntries(entries, timeZone);
     const total_entries = entries.length;
-    const latest_entry_date = entries.length > 0 ? entries[0].created_at || null : null;
-    const first_entry_date = entries.length > 0 ? entries[entries.length - 1].created_at || null : null;
+    const { latestEntryDate, firstEntryDate } = getValidStatsDateRange(entries);
 
     const stats: DiaryStats = {
       consecutive_days,
       total_days_with_entries,
       total_entries,
-      latest_entry_date,
-      first_entry_date,
+      latest_entry_date: latestEntryDate,
+      first_entry_date: firstEntryDate,
       current_streak_start,
     };
 

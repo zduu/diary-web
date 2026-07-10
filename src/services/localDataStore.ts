@@ -2,6 +2,14 @@ import { Capacitor } from '@capacitor/core';
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 
 import type { DiaryEntry } from '../types/index.ts';
+import {
+  getLocalStorageItem,
+  isLocalStorageAvailable,
+  removeLocalStorageItem,
+  setLocalStorageItem,
+  setLocalStorageItemStrict,
+} from '../utils/browserStorage.ts';
+import { isDiaryEntryArray } from '../utils/diaryEntryValidation.ts';
 import type { SessionState } from './apiTypes.ts';
 
 const DATA_ROOT = 'diary-local';
@@ -9,6 +17,7 @@ const ENTRIES_FILE_PATH = `${DATA_ROOT}/entries.json`;
 const SETTINGS_FILE_PATH = `${DATA_ROOT}/settings.json`;
 const SESSION_FILE_PATH = `${DATA_ROOT}/session.json`;
 const RUNTIME_FILE_PATH = `${DATA_ROOT}/runtime.json`;
+const NATIVE_FILESYSTEM_OPERATION_TIMEOUT_MS = 8_000;
 
 type RuntimeState = {
   disableDefaults: boolean;
@@ -22,21 +31,17 @@ type StorageKeys = {
   disableDefaults: string;
 };
 
-function hasLocalStorage() {
-  return typeof localStorage !== 'undefined';
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every((item) => typeof item === 'string');
 }
 
 function readStorageJson<T>(key: string): T | null {
-  if (!hasLocalStorage()) {
-    return null;
-  }
-
   try {
-    const data = localStorage.getItem(key);
+    const data = getLocalStorageItem(key);
     return data ? JSON.parse(data) as T : null;
   } catch {
     return null;
@@ -44,7 +49,7 @@ function readStorageJson<T>(key: string): T | null {
 }
 
 function readStorageFlag(key: string) {
-  return hasLocalStorage() && localStorage.getItem(key) === 'true';
+  return getLocalStorageItem(key) === 'true';
 }
 
 function isQuotaExceededError(error: unknown) {
@@ -61,7 +66,7 @@ function isQuotaExceededError(error: unknown) {
 
 function writeStorageItem(key: string, value: string, quotaMessage: string) {
   try {
-    localStorage.setItem(key, value);
+    setLocalStorageItemStrict(key, value);
   } catch (error) {
     if (isQuotaExceededError(error)) {
       throw new Error(quotaMessage);
@@ -81,13 +86,36 @@ function isRuntimeState(value: unknown): value is RuntimeState {
   return isRecord(value) && typeof value.disableDefaults === 'boolean';
 }
 
+async function withNativeFilesystemTimeout<T>(operation: Promise<T>, timeoutMessage: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, NATIVE_FILESYSTEM_OPERATION_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([
+      operation,
+      timeoutPromise,
+    ]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 async function readNativeJson<T>(path: string): Promise<T | null> {
   try {
-    const result = await Filesystem.readFile({
-      path,
-      directory: Directory.Data,
-      encoding: Encoding.UTF8,
-    });
+    const result = await withNativeFilesystemTimeout(
+      Filesystem.readFile({
+        path,
+        directory: Directory.Data,
+        encoding: Encoding.UTF8,
+      }),
+      '原生本地数据读取超时'
+    );
     const raw = typeof result.data === 'string' ? result.data : '';
     return raw ? JSON.parse(raw) as T : null;
   } catch {
@@ -96,24 +124,55 @@ async function readNativeJson<T>(path: string): Promise<T | null> {
 }
 
 async function writeNativeJson(path: string, value: unknown): Promise<void> {
-  await Filesystem.writeFile({
-    path,
-    directory: Directory.Data,
-    data: JSON.stringify(value),
-    encoding: Encoding.UTF8,
-    recursive: true,
-  });
+  await withNativeFilesystemTimeout(
+    Filesystem.writeFile({
+      path,
+      directory: Directory.Data,
+      data: JSON.stringify(value),
+      encoding: Encoding.UTF8,
+      recursive: true,
+    }),
+    '原生本地数据保存超时'
+  );
+}
+
+function isMissingNativeFileError(error: unknown) {
+  if (
+    typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && error.code === 'OS-PLUG-FILE-0008'
+  ) {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /not found|does not exist|no such file|missing file/i.test(message);
 }
 
 async function deleteNativeFile(path: string): Promise<void> {
   try {
-    await Filesystem.deleteFile({
-      path,
-      directory: Directory.Data,
-    });
-  } catch {
-    // Ignore missing files when resetting local state.
+    await withNativeFilesystemTimeout(
+      Filesystem.deleteFile({
+        path,
+        directory: Directory.Data,
+      }),
+      '原生本地数据清理超时'
+    );
+  } catch (error) {
+    if (!isMissingNativeFileError(error)) {
+      throw error;
+    }
   }
+}
+
+function restoreStorageItem(key: string, previousValue: string | null) {
+  if (previousValue === null) {
+    removeLocalStorageItem(key);
+    return;
+  }
+
+  setLocalStorageItem(key, previousValue);
 }
 
 export class LocalDataStore {
@@ -128,18 +187,25 @@ export class LocalDataStore {
       return false;
     }
 
+    // 注意：这里刻意用 isNativePlatform() 而非 isNativeAppRuntime()。
+    // capacitor: 协议但桥未注入时，@capacitor/filesystem 的 Web 实现（IndexedDB）
+    // 依然会注册并通过 isPluginAvailable 检查，误入会绕开 localStorage 回退。
     return Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('Filesystem');
   }
 
   private async readEntriesFromNative(): Promise<DiaryEntry[] | null> {
     const nativeEntries = await readNativeJson<DiaryEntry[]>(ENTRIES_FILE_PATH);
-    if (Array.isArray(nativeEntries)) {
+    if (isDiaryEntryArray(nativeEntries)) {
       return nativeEntries;
     }
 
     const legacyEntries = readStorageJson<DiaryEntry[]>(this.storageKeys.entries);
-    if (Array.isArray(legacyEntries)) {
-      await writeNativeJson(ENTRIES_FILE_PATH, legacyEntries);
+    if (isDiaryEntryArray(legacyEntries)) {
+      try {
+        await writeNativeJson(ENTRIES_FILE_PATH, legacyEntries);
+      } catch {
+        // Keep serving valid legacy data even if native migration is temporarily unavailable.
+      }
       return legacyEntries;
     }
 
@@ -148,14 +214,18 @@ export class LocalDataStore {
 
   private async readSettingsFromNative(): Promise<Record<string, string> | null> {
     const nativeSettings = await readNativeJson<Record<string, string>>(SETTINGS_FILE_PATH);
-    if (isRecord(nativeSettings)) {
-      return nativeSettings as Record<string, string>;
+    if (isStringRecord(nativeSettings)) {
+      return nativeSettings;
     }
 
     const legacySettings = readStorageJson<Record<string, string>>(this.storageKeys.settings);
-    if (isRecord(legacySettings)) {
-      await writeNativeJson(SETTINGS_FILE_PATH, legacySettings);
-      return legacySettings as Record<string, string>;
+    if (isStringRecord(legacySettings)) {
+      try {
+        await writeNativeJson(SETTINGS_FILE_PATH, legacySettings);
+      } catch {
+        // Keep serving valid legacy data even if native migration is temporarily unavailable.
+      }
+      return legacySettings;
     }
 
     return null;
@@ -173,7 +243,11 @@ export class LocalDataStore {
     };
 
     if (legacySession.isAuthenticated || legacySession.isAdminAuthenticated) {
-      await writeNativeJson(SESSION_FILE_PATH, legacySession);
+      try {
+        await writeNativeJson(SESSION_FILE_PATH, legacySession);
+      } catch {
+        // Keep serving valid legacy data even if native migration is temporarily unavailable.
+      }
       return legacySession;
     }
 
@@ -190,7 +264,11 @@ export class LocalDataStore {
       disableDefaults: readStorageFlag(this.storageKeys.disableDefaults),
     };
     if (legacyRuntime.disableDefaults) {
-      await writeNativeJson(RUNTIME_FILE_PATH, legacyRuntime);
+      try {
+        await writeNativeJson(RUNTIME_FILE_PATH, legacyRuntime);
+      } catch {
+        // Keep serving valid legacy data even if native migration is temporarily unavailable.
+      }
       return legacyRuntime;
     }
 
@@ -208,7 +286,7 @@ export class LocalDataStore {
     }
 
     const storedEntries = readStorageJson<DiaryEntry[]>(this.storageKeys.entries);
-    if (Array.isArray(storedEntries)) {
+    if (isDiaryEntryArray(storedEntries)) {
       return storedEntries;
     }
 
@@ -221,13 +299,15 @@ export class LocalDataStore {
       return;
     }
 
-    if (hasLocalStorage()) {
-      writeStorageItem(
-        this.storageKeys.entries,
-        JSON.stringify(entries),
-        '浏览器本地存储空间已满，当前 Web 端无法继续保存这批日记。请减少导入体积、清理本地数据，或改用 APK 导入/同步。'
-      );
+    if (!isLocalStorageAvailable()) {
+      throw new Error('浏览器本地存储不可用，当前 Web 端无法保存日记数据。请检查浏览器隐私设置或改用 APK。');
     }
+
+    writeStorageItem(
+      this.storageKeys.entries,
+      JSON.stringify(entries),
+      '浏览器本地存储空间已满，当前 Web 端无法继续保存这批日记。请减少导入体积、清理本地数据，或改用 APK 导入/同步。'
+    );
   }
 
   async getSettings(getDefaultSettings: () => Record<string, string>): Promise<Record<string, string>> {
@@ -237,7 +317,7 @@ export class LocalDataStore {
     }
 
     const storedSettings = readStorageJson<Record<string, string>>(this.storageKeys.settings);
-    return isRecord(storedSettings) ? storedSettings as Record<string, string> : getDefaultSettings();
+    return isStringRecord(storedSettings) ? storedSettings : getDefaultSettings();
   }
 
   async saveSettings(settings: Record<string, string>): Promise<void> {
@@ -246,13 +326,15 @@ export class LocalDataStore {
       return;
     }
 
-    if (hasLocalStorage()) {
-      writeStorageItem(
-        this.storageKeys.settings,
-        JSON.stringify(settings),
-        '浏览器本地存储空间已满，当前 Web 端无法保存设置。请清理浏览器站点数据后重试。'
-      );
+    if (!isLocalStorageAvailable()) {
+      throw new Error('浏览器本地存储不可用，当前 Web 端无法保存设置。请检查浏览器隐私设置或改用 APK。');
     }
+
+    writeStorageItem(
+      this.storageKeys.settings,
+      JSON.stringify(settings),
+      '浏览器本地存储空间已满，当前 Web 端无法保存设置。请清理浏览器站点数据后重试。'
+    );
   }
 
   async getSession(): Promise<SessionState> {
@@ -278,20 +360,29 @@ export class LocalDataStore {
       return;
     }
 
-    if (!hasLocalStorage()) {
-      return;
+    if (!isLocalStorageAvailable()) {
+      throw new Error('浏览器本地存储不可用，当前 Web 端无法保存登录状态。请检查浏览器隐私设置或改用 APK。');
     }
 
-    writeStorageItem(
-      this.storageKeys.appAuth,
-      String(session.isAuthenticated),
-      '浏览器本地存储空间已满，当前 Web 端无法保存登录状态。请清理浏览器站点数据后重试。'
-    );
-    writeStorageItem(
-      this.storageKeys.adminAuth,
-      String(session.isAdminAuthenticated),
-      '浏览器本地存储空间已满，当前 Web 端无法保存登录状态。请清理浏览器站点数据后重试。'
-    );
+    const previousAppAuth = getLocalStorageItem(this.storageKeys.appAuth);
+    const previousAdminAuth = getLocalStorageItem(this.storageKeys.adminAuth);
+
+    try {
+      writeStorageItem(
+        this.storageKeys.appAuth,
+        String(session.isAuthenticated),
+        '浏览器本地存储空间已满，当前 Web 端无法保存登录状态。请清理浏览器站点数据后重试。'
+      );
+      writeStorageItem(
+        this.storageKeys.adminAuth,
+        String(session.isAdminAuthenticated),
+        '浏览器本地存储空间已满，当前 Web 端无法保存登录状态。请清理浏览器站点数据后重试。'
+      );
+    } catch (error) {
+      restoreStorageItem(this.storageKeys.appAuth, previousAppAuth);
+      restoreStorageItem(this.storageKeys.adminAuth, previousAdminAuth);
+      throw error;
+    }
   }
 
   async clearSession(): Promise<void> {
@@ -299,12 +390,12 @@ export class LocalDataStore {
       await deleteNativeFile(SESSION_FILE_PATH);
     }
 
-    if (!hasLocalStorage()) {
+    if (!isLocalStorageAvailable()) {
       return;
     }
 
-    localStorage.removeItem(this.storageKeys.appAuth);
-    localStorage.removeItem(this.storageKeys.adminAuth);
+    removeLocalStorageItem(this.storageKeys.appAuth);
+    removeLocalStorageItem(this.storageKeys.adminAuth);
   }
 
   async isDefaultDataDisabled(): Promise<boolean> {
@@ -324,16 +415,16 @@ export class LocalDataStore {
       }
     }
 
-    if (!hasLocalStorage()) {
+    if (!isLocalStorageAvailable()) {
       return;
     }
 
     if (enabled) {
-      localStorage.removeItem(this.storageKeys.disableDefaults);
+      removeLocalStorageItem(this.storageKeys.disableDefaults);
       return;
     }
 
-    localStorage.setItem(this.storageKeys.disableDefaults, 'true');
+    setLocalStorageItem(this.storageKeys.disableDefaults, 'true');
   }
 
   async clearCoreData(): Promise<void> {
@@ -346,13 +437,13 @@ export class LocalDataStore {
       ]);
     }
 
-    if (!hasLocalStorage()) {
+    if (!isLocalStorageAvailable()) {
       return;
     }
 
-    localStorage.removeItem(this.storageKeys.entries);
-    localStorage.removeItem(this.storageKeys.settings);
-    localStorage.removeItem(this.storageKeys.appAuth);
-    localStorage.removeItem(this.storageKeys.adminAuth);
+    removeLocalStorageItem(this.storageKeys.entries);
+    removeLocalStorageItem(this.storageKeys.settings);
+    removeLocalStorageItem(this.storageKeys.appAuth);
+    removeLocalStorageItem(this.storageKeys.adminAuth);
   }
 }

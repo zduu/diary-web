@@ -4,8 +4,9 @@ import { useThemeContext } from './ThemeProvider';
 import { useIsMobile } from '../hooks/useIsMobile';
 import type { DiaryEntry } from '../types/index.ts';
 import { ActiveFilterChip, QuickFilterDropdown } from './filters/QuickFilterControls';
-import { sanitizeFilterMetaControls } from './filters/filterEntryMeta';
-import { normalizeTimeString } from '../utils/timeUtils.ts';
+import { formatMonthLabel, sanitizeFilterMetaControls } from './filters/filterEntryMeta';
+import { sanitizeEntryHidden, sanitizeEntryTags } from '../utils/entryTextValidation.ts';
+import { parseTimeString } from '../utils/timeUtils.ts';
 
 interface QuickFiltersProps {
   entries: DiaryEntry[];
@@ -95,24 +96,25 @@ export function QuickFilters({
     }
 
     const results = deferredEntries.filter(entry => {
-      if (!isAdminAuthenticated && entry.hidden) {
+      if (!isAdminAuthenticated && sanitizeEntryHidden(entry.hidden)) {
         return false;
       }
 
       // 标签过滤（多标签支持）
       if (tags.length > 0) {
         let tagMatched = false;
+        const entryTags = sanitizeEntryTags(entry.tags);
 
         for (const tag of tags) {
           if (tag === '__no_tags__') {
             // 筛选无标签的日记
-            if (!entry.tags || entry.tags.length === 0) {
+            if (entryTags.length === 0) {
               tagMatched = true;
               break;
             }
           } else {
             // 筛选有特定标签的日记
-            if (entry.tags && entry.tags.includes(tag)) {
+            if (entryTags.includes(tag)) {
               tagMatched = true;
               break;
             }
@@ -126,15 +128,19 @@ export function QuickFilters({
 
       // 年份过滤
       if (year) {
-        const entryDate = new Date(normalizeTimeString(entry.created_at!));
-        if (entryDate.getFullYear().toString() !== year) {
+        const entryDate = parseTimeString(entry.created_at);
+        if (entryDate?.getFullYear().toString() !== year) {
           return false;
         }
       }
 
       // 月份过滤
       if (month) {
-        const entryDate = new Date(normalizeTimeString(entry.created_at!));
+        const entryDate = parseTimeString(entry.created_at);
+        if (!entryDate) {
+          return false;
+        }
+
         const entryMonth = (entryDate.getMonth() + 1).toString().padStart(2, '0');
         if (entryMonth !== month) {
           return false;
@@ -159,7 +165,7 @@ export function QuickFilters({
         label: tag === '__no_tags__' ? '标签：无标签' : `标签：#${tag}`,
       })),
       ...(selectedYear ? [{ id: 'year', label: `年份：${selectedYear}年` }] : []),
-      ...(selectedMonth ? [{ id: 'month', label: `月份：${parseInt(selectedMonth, 10)}月` }] : []),
+      ...(selectedMonth ? [{ id: 'month', label: `月份：${formatMonthLabel(selectedMonth)}` }] : []),
     ];
 
     onFilterSummaryChange?.(items);
@@ -271,7 +277,7 @@ export function QuickFilters({
       ? effectiveFilterMeta.availableMonthsByYear[selectedYear] || []
       : effectiveFilterMeta.availableMonths || []).map((month) => ({
       key: month,
-      label: `${parseInt(month, 10)}月`,
+      label: formatMonthLabel(month),
       selected: selectedMonth === month,
       onSelect: () => {
         setSelectedMonth(month);
@@ -375,11 +381,11 @@ export function QuickFilters({
         <QuickFilterDropdown
           label={
             <>
-              <Calendar className="w-4 h-4" />
-              月份
-            </>
-          }
-          triggerLabel={selectedMonth ? `${parseInt(selectedMonth, 10)}月` : '所有月份'}
+          <Calendar className="w-4 h-4" />
+          月份
+        </>
+      }
+          triggerLabel={selectedMonth ? formatMonthLabel(selectedMonth) : '所有月份'}
           isOpen={isMonthDropdownOpen}
           isMobile={isMobile}
           theme={theme}
@@ -417,7 +423,7 @@ export function QuickFilters({
           {selectedMonth && (
             <ActiveFilterChip
               icon={<Calendar className="w-3 h-3" />}
-              label={`${parseInt(selectedMonth, 10)}月`}
+              label={formatMonthLabel(selectedMonth)}
               isMobile={isMobile}
               theme={theme}
               onRemove={() => setSelectedMonth('')}

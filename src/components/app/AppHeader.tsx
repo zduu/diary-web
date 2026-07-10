@@ -89,10 +89,10 @@ export function AppHeader({
     <header className="sticky top-0 z-30 border-b border-transparent">
       <div
         className={`mx-auto max-w-6xl ${isMobile ? 'px-3 pt-2.5' : 'px-4 pt-4 md:px-6'}`}
-        style={{ paddingTop: isMobile ? 'max(0.5rem, var(--safe-area-top))' : undefined }}
+        style={{ paddingTop: isMobile ? 'max(0.5rem, var(--safe-area-top))' : 'max(1rem, var(--safe-area-top))' }}
       >
         <div
-          className={`app-header app-header--clear ${isMobile ? 'rounded-[1.3rem] px-3 py-2' : 'rounded-[1.9rem] px-4 py-3 md:px-5 md:py-4'}`}
+          className={`app-header ${isMobile ? 'rounded-[1.5rem] px-3 py-2' : 'rounded-[1.9rem] px-4 py-3 md:px-5 md:py-4'}`}
           style={headerSurfaceStyle}
         >
           <div className={`flex ${isMobile ? 'flex-col gap-2' : 'flex-col gap-4 md:flex-row md:items-center md:justify-between'}`}>

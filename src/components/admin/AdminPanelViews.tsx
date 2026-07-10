@@ -12,6 +12,29 @@ import type {
   AdminLoginViewProps,
   AdminPanelHeaderActionsProps,
 } from './adminPanelTypes';
+import { getDiaryEntryKey, hasPersistedDiaryEntryId } from '../../utils/diaryEntryIdentity.ts';
+import { formatFullDateTime } from '../../utils/timeUtils.ts';
+import type { DiarySyncStatus } from '../../services/entrySync.ts';
+
+export function formatAdminSyncDescription(syncStatus: DiarySyncStatus | null, isSyncingToRemote: boolean) {
+  if (isSyncingToRemote) {
+    return '正在把本地改动推送到云端，请稍候。';
+  }
+
+  if (syncStatus == null) {
+    return '正在读取本地同步状态。';
+  }
+
+  if (syncStatus.totalPending > 0) {
+    return `待同步 ${syncStatus.totalPending} 条，新增 ${syncStatus.pendingCreates} / 更新 ${syncStatus.pendingUpdates} / 删除 ${syncStatus.pendingDeletes}${syncStatus.conflicts > 0 ? ` / 冲突 ${syncStatus.conflicts}` : ''}`;
+  }
+
+  if (syncStatus.lastSyncedAt) {
+    return `当前无待同步内容，上次同步于 ${formatFullDateTime(syncStatus.lastSyncedAt)}`;
+  }
+
+  return '当前无待同步内容，还没有执行过云端同步。';
+}
 
 export function AdminLoginView({
   accessProfile,
@@ -275,19 +298,24 @@ export function AdminEntriesSection({
       />
 
       <div className="space-y-3 max-h-96 overflow-y-auto">
-        {filteredEntries.map((entry) => (
-          <AdminEntryListItem
-            key={entry.id}
-            entry={entry}
-            theme={theme}
-            getTextColor={getTextColor}
-            operationState={getOperationState(entry.id!)}
-            timestampLabel={entryTimestampLabels[entry.id!] || ''}
-            onEdit={onEditEntry ? () => onEditEntry(entry) : undefined}
-            onToggleVisibility={() => onToggleVisibility(entry.id!)}
-            onDelete={() => onDeleteEntry(entry.id!)}
-          />
-        ))}
+        {filteredEntries.map((entry, index) => {
+          const entryKey = getDiaryEntryKey(entry, index);
+          const entryId = hasPersistedDiaryEntryId(entry) ? entry.id : undefined;
+
+          return (
+            <AdminEntryListItem
+              key={entryKey}
+              entry={entry}
+              theme={theme}
+              getTextColor={getTextColor}
+              operationState={entryId !== undefined ? getOperationState(entryId) : 'idle'}
+              timestampLabel={entryTimestampLabels[entryKey] || ''}
+              onEdit={entryId !== undefined && onEditEntry ? () => onEditEntry(entry) : undefined}
+              onToggleVisibility={entryId !== undefined ? () => onToggleVisibility(entryId) : undefined}
+              onDelete={entryId !== undefined ? () => onDeleteEntry(entryId) : undefined}
+            />
+          );
+        })}
 
         {filteredEntries.length === 0 && (
           <div className="text-center py-8" style={{ color: getTextColor('secondary') }}>
@@ -406,17 +434,7 @@ export function AdminAuthenticatedView({
         settings={settings}
         theme={theme}
         isNativeApp={isNativeApp}
-        syncDescription={
-          isSyncingToRemote
-            ? '正在把本地改动推送到云端，请稍候。'
-            : syncStatus == null
-              ? '正在读取本地同步状态。'
-              : syncStatus.totalPending > 0
-                ? `待同步 ${syncStatus.totalPending} 条，新增 ${syncStatus.pendingCreates} / 更新 ${syncStatus.pendingUpdates} / 删除 ${syncStatus.pendingDeletes}${syncStatus.conflicts > 0 ? ` / 冲突 ${syncStatus.conflicts}` : ''}`
-                : syncStatus.lastSyncedAt
-                  ? `当前无待同步内容，上次同步于 ${new Date(syncStatus.lastSyncedAt).toLocaleString('zh-CN')}`
-                  : '当前无待同步内容，还没有执行过云端同步。'
-        }
+        syncDescription={formatAdminSyncDescription(syncStatus, isSyncingToRemote)}
         isSyncingToRemote={isSyncingToRemote}
         showAdminPasswordAction={accessProfile?.mode !== 'local'}
         onSyncToRemote={onSyncToRemote}

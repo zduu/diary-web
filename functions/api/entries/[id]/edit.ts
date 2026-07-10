@@ -11,7 +11,7 @@ import {
   readSession,
   requireAdminSession,
 } from '../../_shared.ts';
-import { deleteManagedImagesIfUnreferenced } from '../../_imageStorage.ts';
+import { deleteManagedImagesIfUnreferenced, warnImageCleanupFailures } from '../../_imageStorage.ts';
 
 type EditRequest = Partial<Omit<DiaryEntry, 'id' | 'created_at' | 'updated_at'>>;
 const ENTRY_EDIT_BODY_MAX_BYTES = 40 * 1024 * 1024;
@@ -107,9 +107,7 @@ export const onRequestPost = async (context: { params: { id: string }; request: 
       excludingEntryId: id,
     });
 
-    if (imageCleanup.failedKeys.length > 0) {
-      console.warn('Failed to delete some unreferenced R2 images after entry edit:', imageCleanup.failedKeys);
-    }
+    warnImageCleanupFailures('entry edit', imageCleanup.failedKeys);
 
     return jsonResponse<DiaryEntry>({
       success: true,

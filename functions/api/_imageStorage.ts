@@ -2,6 +2,7 @@ import type { Env } from './_shared.ts';
 
 const IMAGE_ROUTE_PREFIX = '/api/images/';
 const IMAGE_KEY_PATTERN = /^(?:[a-zA-Z0-9][a-zA-Z0-9._-]*)(?:\/[a-zA-Z0-9][a-zA-Z0-9._-]*)*$/;
+const MAX_MANAGED_IMAGE_KEY_LENGTH = 512;
 
 function parseStoredStringArray(value: unknown): string[] {
   if (typeof value !== 'string') {
@@ -23,7 +24,11 @@ export function decodeManagedImageKey(rawKey: string | null | undefined): string
 
   try {
     const decodedKey = decodeURIComponent(rawKey).trim().replace(/^\/+/, '');
-    return decodedKey && IMAGE_KEY_PATTERN.test(decodedKey) ? decodedKey : null;
+    return decodedKey
+      && decodedKey.length <= MAX_MANAGED_IMAGE_KEY_LENGTH
+      && IMAGE_KEY_PATTERN.test(decodedKey)
+      ? decodedKey
+      : null;
   } catch {
     return null;
   }
@@ -145,4 +150,12 @@ export async function deleteManagedImagesIfUnreferenced(options: {
     failedKeys,
     retainedKeys,
   };
+}
+
+export function warnImageCleanupFailures(context: string, failedKeys: string[]): void {
+  if (failedKeys.length === 0) {
+    return;
+  }
+
+  console.warn(`Failed to delete some unreferenced R2 images after ${context}:`, failedKeys);
 }

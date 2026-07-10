@@ -1,4 +1,18 @@
 import type { DiaryEntry, EntrySyncState } from '../types/index.ts';
+import {
+  sanitizeEntryContent,
+  sanitizeEntryContentType,
+  sanitizeEntryHidden,
+  sanitizeEntryMood,
+  sanitizeEntryTags,
+  sanitizeEntryTitle,
+  sanitizeEntryWeather,
+} from '../utils/entryTextValidation.ts';
+import { sortDiaryEntriesByTime } from '../utils/entryTime.ts';
+import { isValidImageSource, MAX_ENTRY_IMAGES_COUNT } from '../utils/imageSourceValidation.ts';
+import { isValidLocationInfo } from '../utils/importUtils.ts';
+import { parseTimeString } from '../utils/timestampUtils.ts';
+import { isPersistedDiaryEntryId } from '../utils/diaryEntryIdentity.ts';
 
 const syncedState: EntrySyncState = 'synced';
 const validSyncStates = new Set<EntrySyncState>([
@@ -28,12 +42,39 @@ function createEntryUuid() {
   return `entry-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function normalizeEntryUuid(value: unknown) {
+  if (typeof value !== 'string') {
+    return createEntryUuid();
+  }
+
+  return value.trim() || createEntryUuid();
+}
+
 function hasTimestamp(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
 function isValidTimestamp(value: string | null | undefined): value is string {
-  return hasTimestamp(value) && !Number.isNaN(Date.parse(value));
+  return hasTimestamp(value) && parseTimeString(value) !== null;
+}
+
+function getSyncTimestamp(value: string | null | undefined) {
+  return parseTimeString(value)?.getTime() ?? null;
+}
+
+function getEntryMutationTimestamp(entry: DiaryEntry) {
+  const updatedAt = getSyncTimestamp(entry.updated_at);
+  const deletedAt = getSyncTimestamp(entry.deleted_at);
+
+  if (updatedAt === null) {
+    return deletedAt;
+  }
+
+  if (deletedAt === null) {
+    return updatedAt;
+  }
+
+  return Math.max(updatedAt, deletedAt);
 }
 
 function ensureTimestamp(value: string | null | undefined, fallbackValue: string) {
@@ -42,6 +83,16 @@ function ensureTimestamp(value: string | null | undefined, fallbackValue: string
   }
 
   return value;
+}
+
+function normalizeEntryImages(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(isValidImageSource)
+    .slice(0, MAX_ENTRY_IMAGES_COUNT);
 }
 
 function normalizeLegacySyncState(entry: DiaryEntry, updatedAt: string): {
@@ -80,14 +131,16 @@ export function normalizeDiaryEntry(entry: DiaryEntry): DiaryEntry {
 
   return {
     ...entry,
-    entry_uuid: entry.entry_uuid || createEntryUuid(),
-    content_type: entry.content_type || 'markdown',
-    mood: entry.mood || 'neutral',
-    weather: entry.weather || 'unknown',
-    tags: entry.tags || [],
-    images: entry.images || [],
-    location: entry.location || null,
-    hidden: entry.hidden || false,
+    entry_uuid: normalizeEntryUuid(entry.entry_uuid),
+    title: sanitizeEntryTitle(entry.title),
+    content: sanitizeEntryContent(entry.content),
+    content_type: sanitizeEntryContentType(entry.content_type),
+    mood: sanitizeEntryMood(entry.mood),
+    weather: sanitizeEntryWeather(entry.weather),
+    tags: sanitizeEntryTags(entry.tags),
+    images: normalizeEntryImages(entry.images),
+    location: isValidLocationInfo(entry.location) ? entry.location ?? null : null,
+    hidden: sanitizeEntryHidden(entry.hidden),
     created_at: createdAt,
     updated_at: updatedAt,
     deleted_at: entry.deleted_at ?? null,
@@ -166,11 +219,13 @@ export function buildDiarySyncStatus(entries: DiaryEntry[]): DiarySyncStatus {
       return;
     }
 
-    if (!isValidTimestamp(entry.last_synced_at)) {
+    const entryLastSyncedAt = getSyncTimestamp(entry.last_synced_at);
+    if (entryLastSyncedAt === null) {
       return;
     }
 
-    if (!lastSyncedAt || new Date(entry.last_synced_at).getTime() > new Date(lastSyncedAt).getTime()) {
+    const currentLastSyncedAt = getSyncTimestamp(lastSyncedAt);
+    if (currentLastSyncedAt === null || entryLastSyncedAt > currentLastSyncedAt) {
       lastSyncedAt = entry.last_synced_at;
     }
   });
@@ -193,12 +248,50 @@ export function listPendingSyncEntries(entries: DiaryEntry[]): DiaryEntry[] {
     .filter((entry) => entry.sync_state !== syncedState);
 }
 
-export function markDiaryEntriesSynced(entries: DiaryEntry[], entryUuids: string[], syncedAt = new Date().toISOString()) {
+function getSyncMutationFingerprint(entry: DiaryEntry) {
+  const normalizedEntry = normalizeDiaryEntry(entry);
+
+  return JSON.stringify({
+    entry_uuid: normalizedEntry.entry_uuid,
+    title: normalizedEntry.title,
+    content: normalizedEntry.content,
+    content_type: normalizedEntry.content_type,
+    mood: normalizedEntry.mood,
+    weather: normalizedEntry.weather,
+    images: normalizedEntry.images,
+    location: normalizedEntry.location,
+    tags: normalizedEntry.tags,
+    hidden: normalizedEntry.hidden,
+    created_at: normalizedEntry.created_at,
+    updated_at: normalizedEntry.updated_at,
+    deleted_at: normalizedEntry.deleted_at,
+    sync_state: normalizedEntry.sync_state,
+  });
+}
+
+export function markDiaryEntriesSynced(
+  entries: DiaryEntry[],
+  entryUuids: string[],
+  syncedAt = new Date().toISOString(),
+  expectedEntries?: DiaryEntry[]
+) {
   const targetIds = new Set(entryUuids);
+  const expectedFingerprints = expectedEntries
+    ? new Map(expectedEntries
+      .map(normalizeDiaryEntry)
+      .filter((entry) => entry.entry_uuid)
+      .map((entry) => [entry.entry_uuid!, getSyncMutationFingerprint(entry)]))
+    : null;
   const nextEntries: DiaryEntry[] = [];
 
   for (const entry of entries.map(normalizeDiaryEntry)) {
     if (!entry.entry_uuid || !targetIds.has(entry.entry_uuid)) {
+      nextEntries.push(entry);
+      continue;
+    }
+
+    const expectedFingerprint = expectedFingerprints?.get(entry.entry_uuid);
+    if (expectedFingerprints && expectedFingerprint !== getSyncMutationFingerprint(entry)) {
       nextEntries.push(entry);
       continue;
     }
@@ -219,13 +312,34 @@ export function markDiaryEntriesSynced(entries: DiaryEntry[], entryUuids: string
 
 export function applyIncrementalRemoteEntries(currentEntries: DiaryEntry[], remoteEntries: DiaryEntry[], syncedAt = new Date().toISOString()) {
   const entryMap = new Map<string, DiaryEntry>();
+  const usedEntryIds = new Set<number>();
+  let nextGeneratedId = 1;
+
+  const reserveUniqueEntryId = (preferredId: unknown) => {
+    if (isPersistedDiaryEntryId(preferredId) && !usedEntryIds.has(preferredId)) {
+      usedEntryIds.add(preferredId);
+      return preferredId;
+    }
+
+    while (usedEntryIds.has(nextGeneratedId)) {
+      nextGeneratedId += 1;
+    }
+
+    const generatedId = nextGeneratedId;
+    usedEntryIds.add(generatedId);
+    nextGeneratedId += 1;
+    return generatedId;
+  };
 
   for (const entry of currentEntries.map(normalizeDiaryEntry)) {
     if (!entry.entry_uuid) {
       continue;
     }
 
-    entryMap.set(entry.entry_uuid, entry);
+    entryMap.set(entry.entry_uuid, {
+      ...entry,
+      id: reserveUniqueEntryId(entry.id),
+    });
   }
 
   for (const remoteEntry of remoteEntries.map(normalizeDiaryEntry)) {
@@ -233,20 +347,56 @@ export function applyIncrementalRemoteEntries(currentEntries: DiaryEntry[], remo
       continue;
     }
 
+    const existingEntry = entryMap.get(remoteEntry.entry_uuid);
+    if (existingEntry && existingEntry.sync_state !== syncedState) {
+      continue;
+    }
+
     if (remoteEntry.deleted_at) {
+      // 远端条目已删除：本地不存在则跳过，本地存在则比较时间戳决定是否删除
+      if (!existingEntry) {
+        continue;
+      }
+
+      const remoteDeletedAt = getSyncTimestamp(remoteEntry.deleted_at);
+      if (remoteDeletedAt === null) {
+        continue;
+      }
+
+      const existingMutationAt = getEntryMutationTimestamp(existingEntry);
+      if (existingMutationAt !== null && remoteDeletedAt < existingMutationAt) {
+        continue;
+      }
+
       entryMap.delete(remoteEntry.entry_uuid);
       continue;
     }
 
     entryMap.set(remoteEntry.entry_uuid, {
       ...remoteEntry,
+      id: existingEntry?.id ?? reserveUniqueEntryId(remoteEntry.id),
       deleted_at: null,
       sync_state: syncedState,
       last_synced_at: syncedAt,
     });
   }
 
-  return [...entryMap.values()]
-    .map((entry) => normalizeDiaryEntry(entry))
-    .sort((left, right) => new Date(right.created_at ?? 0).getTime() - new Date(left.created_at ?? 0).getTime());
+  return sortDiaryEntriesByTime([...entryMap.values()].map((entry) => normalizeDiaryEntry(entry)));
+}
+
+export function applyDiarySyncResult(
+  currentEntries: DiaryEntry[],
+  sentEntries: DiaryEntry[],
+  confirmedEntryUuids: string[],
+  remoteEntries: DiaryEntry[],
+  syncedAt = new Date().toISOString()
+) {
+  const entriesAfterConfirmation = markDiaryEntriesSynced(
+    currentEntries,
+    confirmedEntryUuids,
+    syncedAt,
+    sentEntries
+  );
+
+  return applyIncrementalRemoteEntries(entriesAfterConfirmation, remoteEntries, syncedAt);
 }

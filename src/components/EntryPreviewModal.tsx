@@ -6,8 +6,16 @@ import { ModalHeader } from './ModalHeader';
 import { LazyMarkdownRenderer } from './LazyMarkdownRenderer';
 import { useThemeContext } from './ThemeProvider';
 import { EntryMetaPill, EntryTagList, EntryTitleBlock } from './entry/entryDisplay';
+import { clampImageIndex, getRenderableEntryImages } from './entry/entryImages';
 import { formatFullDateTime } from '../utils/timeUtils.ts';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { getDiaryEntryKey, hasPersistedDiaryEntryId } from '../utils/diaryEntryIdentity.ts';
+import {
+  sanitizeEntryContent,
+  sanitizeEntryContentType,
+  sanitizeEntryTags,
+  sanitizeEntryTitle,
+} from '../utils/entryTextValidation.ts';
 
 const ImageViewer = lazy(() =>
   import('./ImageViewer').then((module) => ({ default: module.ImageViewer }))
@@ -45,12 +53,15 @@ export function EntryPreviewModal({
   const [imageViewerIndex, setImageViewerIndex] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
+  const entryResetKey = entry
+    ? `${getDiaryEntryKey(entry, currentIndex ?? 0)}-${entry.created_at ?? ''}-${entry.title}`
+    : 'none';
 
   useEffect(() => {
     setActivePreviewImageIndex(0);
     setImageViewerOpen(false);
     setImageViewerIndex(0);
-  }, [entry?.id, isOpen]);
+  }, [entryResetKey, isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -58,6 +69,12 @@ export function EntryPreviewModal({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (imageViewerOpen) {
+        // 嵌套的图片查看器打开时，键盘事件交给它处理，
+        // 避免 Escape 连关两层、方向键误切换底层日记
+        return;
+      }
+
       if (event.key === 'Escape') {
         event.preventDefault();
         onClose();
@@ -76,11 +93,19 @@ export function EntryPreviewModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hasNext, hasPrevious, isOpen, onClose, onNext, onPrevious]);
+  }, [hasNext, hasPrevious, imageViewerOpen, isOpen, onClose, onNext, onPrevious]);
 
   if (!entry) {
     return null;
   }
+
+  const canEdit = Boolean(onEdit && hasPersistedDiaryEntryId(entry));
+  const renderableImages = getRenderableEntryImages(entry.images);
+  const entryTitle = sanitizeEntryTitle(entry.title);
+  const entryContent = sanitizeEntryContent(entry.content);
+  const contentType = sanitizeEntryContentType(entry.content_type);
+  const entryTags = sanitizeEntryTags(entry.tags);
+  const previewImageIndex = clampImageIndex(activePreviewImageIndex, renderableImages.length);
 
   return (
     <ModalShell
@@ -153,12 +178,12 @@ export function EntryPreviewModal({
                 </button>
               </div>
             )}
-            {onEdit ? (
+            {canEdit ? (
               <button
                 type="button"
                 onClick={() => {
                   onClose();
-                  onEdit(entry);
+                  onEdit?.(entry);
                 }}
                 className={`rounded-xl text-sm font-medium transition-transform duration-200 hover:-translate-y-0.5 ${isMobile ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}
                 style={{
@@ -205,8 +230,8 @@ export function EntryPreviewModal({
         <div className={isMobile ? 'mb-4' : 'mb-5'}>
           <EntryTitleBlock
             theme={theme}
-            title={entry.title || '无标题'}
-            subtitle={<>记录于 {formatFullDateTime(entry.created_at!)}</>}
+            title={entryTitle}
+            subtitle={<>记录于 {formatFullDateTime(entry.created_at)}</>}
             isMobile={isMobile}
           />
         </div>
@@ -214,7 +239,7 @@ export function EntryPreviewModal({
         <div className={`mb-4 flex flex-wrap ${isMobile ? 'gap-1.5' : 'gap-2'} text-sm`} style={{ color: theme.colors.textSecondary }}>
           <EntryMetaPill theme={theme}>
             <Calendar className="h-3.5 w-3.5" />
-            {formatFullDateTime(entry.created_at!)}
+            {formatFullDateTime(entry.created_at)}
           </EntryMetaPill>
           {entry.location?.name && (
             <EntryMetaPill theme={theme}>
@@ -224,43 +249,43 @@ export function EntryPreviewModal({
           )}
         </div>
 
-        {entry.tags && entry.tags.length > 0 && (
+        {entryTags.length > 0 && (
           <div className={isMobile ? 'mb-4' : 'mb-5'}>
-            <EntryTagList theme={theme} tags={entry.tags} isMobile={isMobile} />
+            <EntryTagList theme={theme} tags={entryTags} isMobile={isMobile} />
           </div>
         )}
 
-        {entry.content_type === 'markdown' ? (
-          <LazyMarkdownRenderer content={entry.content} />
+        {contentType === 'markdown' ? (
+          <LazyMarkdownRenderer content={entryContent} />
         ) : (
           <div className="whitespace-pre-wrap text-[15px] leading-8 md:text-base" style={{ color: theme.colors.text }}>
-            {entry.content}
+            {entryContent}
           </div>
         )}
 
-        {entry.images && entry.images.length > 0 && (
+        {renderableImages.length > 0 && (
           <div className={`${isMobile ? 'mt-5 space-y-2.5' : 'mt-6 space-y-3'}`}>
             <button
               type="button"
               onClick={() => {
-                setImageViewerIndex(activePreviewImageIndex);
+                setImageViewerIndex(previewImageIndex);
                 setImageViewerOpen(true);
               }}
               className={`block w-full overflow-hidden ${isMobile ? 'rounded-[1.25rem]' : 'rounded-[1.6rem]'}`}
               style={{ border: `1px solid ${theme.colors.border}` }}
             >
               <img
-                src={entry.images[activePreviewImageIndex]}
-                alt={`预览图片 ${activePreviewImageIndex + 1}`}
+                src={renderableImages[previewImageIndex]}
+                alt={`预览图片 ${previewImageIndex + 1}`}
                 className="aspect-[16/10] w-full object-cover transition-transform duration-200 hover:scale-[1.02]"
                 decoding="async"
               />
             </button>
 
-            {entry.images.length > 1 && (
+            {renderableImages.length > 1 && (
               <div className={`flex overflow-x-auto pb-1 ${isMobile ? 'gap-1.5' : 'gap-2'}`}>
-                {entry.images.map((imageUrl, index) => {
-                  const isActive = index === activePreviewImageIndex;
+                {renderableImages.map((imageUrl, index) => {
+                  const isActive = index === previewImageIndex;
 
                   return (
                     <button
@@ -290,10 +315,10 @@ export function EntryPreviewModal({
         )}
       </div>
 
-      {entry.images && entry.images.length > 0 && (
+      {renderableImages.length > 0 && (
         <Suspense fallback={null}>
           <ImageViewer
-            images={entry.images}
+            images={renderableImages}
             initialIndex={imageViewerIndex}
             isOpen={imageViewerOpen}
             onClose={() => setImageViewerOpen(false)}

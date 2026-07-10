@@ -18,8 +18,11 @@ import { useNotificationState } from './hooks/useNotificationState';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { apiService } from './services/api';
 import type { DiaryEntry } from './types/index.ts';
+import { getLocalStorageItem, setLocalStorageItem } from './utils/browserStorage.ts';
+import { hasPersistedDiaryEntryId } from './utils/diaryEntryIdentity.ts';
 import { clearOfflineEntrySnapshot, writeOfflineEntrySnapshot } from './utils/offlineEntrySnapshot.ts';
 import { debugError } from './utils/logger.ts';
+import { formatFullDateTime } from './utils/timeUtils.ts';
 
 const Timeline = lazy(() =>
   import('./components/Timeline').then((module) => ({ default: module.Timeline }))
@@ -114,20 +117,20 @@ function AppContent() {
   const finishTransitionTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('diary_view_mode') as 'card' | 'timeline' | 'archive' | null;
+    const saved = getLocalStorageItem('diary_view_mode');
     if (saved && (saved === 'card' || saved === 'timeline' || saved === 'archive')) {
       setViewMode(saved);
       return;
     }
 
     setViewMode('timeline');
-    localStorage.setItem('diary_view_mode', 'timeline');
+    setLocalStorageItem('diary_view_mode', 'timeline');
   }, []);
 
   useEffect(() => {
     if (!interfaceSettingsLoading && !interfaceSettings.archiveView.enabled && viewMode === 'archive') {
       setViewMode('card');
-      localStorage.setItem('diary_view_mode', 'card');
+      setLocalStorageItem('diary_view_mode', 'card');
     }
   }, [interfaceSettings.archiveView.enabled, interfaceSettingsLoading, viewMode]);
 
@@ -253,13 +256,18 @@ function AppContent() {
 
   const handleViewModeChange = (mode: 'card' | 'timeline' | 'archive') => {
     setViewMode(mode);
-    localStorage.setItem('diary_view_mode', mode);
+    setLocalStorageItem('diary_view_mode', mode);
   };
 
   const handleSave = async (entryData: Omit<DiaryEntry, 'id' | 'created_at' | 'updated_at'>) => {
     try {
       if (editingEntry) {
-        await updateEntry(editingEntry.id!, entryData);
+        if (!hasPersistedDiaryEntryId(editingEntry)) {
+          showNotification('这条日记缺少有效 ID，无法直接编辑。请重新导入或新建后再保存。', 'error');
+          return;
+        }
+
+        await updateEntry(editingEntry.id, entryData);
         showNotification('日记已保存', 'success');
         completeSave(editingEntry.id);
         return;
@@ -444,10 +452,9 @@ function AppContent() {
         style={{
           backgroundColor: theme.colors.background,
           transform: showMainApp ? 'scale(1)' : 'scale(0.98)',
-          filter: showMainApp ? 'none' : 'blur(4px)',
           transition: isTransitioningToApp
-            ? 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)'
-            : 'all 0.3s ease',
+            ? 'opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)'
+            : 'opacity 0.3s ease, transform 0.3s ease',
           display: showMainApp ? 'block' : 'none',
           minHeight: '100vh',
         }}
@@ -495,7 +502,7 @@ function AppContent() {
               title={isOnline ? '当前显示最近保存的离线快照' : '当前处于离线阅读模式'}
               description={
                 offlineSnapshotMeta.savedAt
-                  ? `最近一次可用公开内容保存于 ${new Date(offlineSnapshotMeta.savedAt).toLocaleString('zh-CN')}，恢复联网后刷新即可同步最新内容。`
+                  ? `最近一次可用公开内容保存于 ${formatFullDateTime(offlineSnapshotMeta.savedAt)}，恢复联网后刷新即可同步最新内容。`
                   : '最近一次公开内容已保存在本机，恢复联网后刷新即可同步最新内容。'
               }
               isMobile={isMobile}

@@ -22,7 +22,7 @@ async function loadFetchListener(deps: {
       keys: async () => [],
       match: async () => undefined,
       open: async (cacheName: string) => {
-        assert.equal(cacheName, 'diary-shell-v2');
+        assert.equal(cacheName, 'diary-shell-v3');
         return deps.cache;
       },
     },

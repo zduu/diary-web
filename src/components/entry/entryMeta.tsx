@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import { Cloud, CloudRain, Snowflake, Sun } from 'lucide-react';
 import type { MoodType, WeatherType } from '../../types/index.ts';
+import { sanitizeEntryMood, sanitizeEntryWeather } from '../../utils/entryTextValidation.ts';
 
 const moodEmojis: Record<MoodType, string> = {
   happy: '😊',
@@ -44,18 +45,22 @@ const weatherIcons: Record<WeatherType, ReactElement> = {
   unknown: <Cloud className="h-4 w-4 text-slate-400" />,
 };
 
-export function getEntryMoodEmoji(mood: string) {
-  return moodEmojis[mood as MoodType] || '💭';
+export function getEntryMoodEmoji(mood: unknown) {
+  const safeMood = sanitizeEntryMood(mood);
+  return moodEmojis[safeMood as MoodType] || '💭';
 }
 
-export function getEntryMoodLabel(mood: string) {
-  return moodLabels[mood as MoodType] || mood;
+export function getEntryMoodLabel(mood: unknown) {
+  const safeMood = sanitizeEntryMood(mood);
+  return moodLabels[safeMood as MoodType] || safeMood;
 }
 
-export function getEntryWeatherLabel(weather: string) {
-  return weatherLabels[weather as WeatherType] || weather;
+export function getEntryWeatherLabel(weather: unknown) {
+  const safeWeather = sanitizeEntryWeather(weather);
+  return weatherLabels[safeWeather as WeatherType] || safeWeather;
 }
 
-export function getEntryWeatherIcon(weather: string) {
-  return weatherIcons[weather as WeatherType] || <Cloud className="h-4 w-4 text-slate-400" />;
+export function getEntryWeatherIcon(weather: unknown) {
+  const safeWeather = sanitizeEntryWeather(weather);
+  return weatherIcons[safeWeather as WeatherType] || <Cloud className="h-4 w-4 text-slate-400" />;
 }

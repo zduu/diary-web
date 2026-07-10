@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useThemeContext } from './ThemeProvider';
 import type { ThemeConfig } from '../hooks/useTheme';
+import { isValidImageSource } from '../utils/imageSourceValidation';
 
 interface MarkdownRendererProps {
   content: string;
@@ -11,13 +12,88 @@ interface MarkdownRendererProps {
 
 const imageDimensionsCache = new Map<string, { width: number; height: number }>();
 const loadedMarkdownImageCache = new Set<string>();
+const MARKDOWN_IMAGE_CACHE_LIMIT = 64;
+const MARKDOWN_URL_BASE = 'https://diary.local';
+const safeLinkProtocols = new Set(['http:', 'https:', 'mailto:']);
 
-async function copyToClipboard(text: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
+function touchCachedValue<T>(cache: Map<string, T>, key: string) {
+  const value = cache.get(key);
+  if (!value) {
+    return null;
   }
 
+  cache.delete(key);
+  cache.set(key, value);
+  return value;
+}
+
+function touchCachedSetValue(cache: Set<string>, key: string) {
+  if (!cache.has(key)) {
+    return false;
+  }
+
+  cache.delete(key);
+  cache.add(key);
+  return true;
+}
+
+function trimOldestCacheEntries(cache: Map<string, unknown> | Set<string>) {
+  while (cache.size > MARKDOWN_IMAGE_CACHE_LIMIT) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey === undefined) {
+      return;
+    }
+
+    cache.delete(oldestKey);
+  }
+}
+
+function rememberImageDimensions(src: string, dimensions: { width: number; height: number }) {
+  imageDimensionsCache.delete(src);
+  imageDimensionsCache.set(src, dimensions);
+  trimOldestCacheEntries(imageDimensionsCache);
+}
+
+function rememberLoadedImage(src: string) {
+  loadedMarkdownImageCache.delete(src);
+  loadedMarkdownImageCache.add(src);
+  trimOldestCacheEntries(loadedMarkdownImageCache);
+}
+
+function normalizeMarkdownUrl(value: string | undefined) {
+  const trimmedValue = value?.trim() ?? '';
+  if (
+    !trimmedValue
+    || Array.from(trimmedValue).some((character) => {
+      const charCode = character.charCodeAt(0);
+      return charCode <= 31 || charCode === 127;
+    })
+  ) {
+    return null;
+  }
+
+  try {
+    return new URL(trimmedValue, MARKDOWN_URL_BASE);
+  } catch {
+    return null;
+  }
+}
+
+function getSafeMarkdownLinkHref(href: string | undefined) {
+  const parsedUrl = normalizeMarkdownUrl(href);
+  if (!parsedUrl || !safeLinkProtocols.has(parsedUrl.protocol)) {
+    return null;
+  }
+
+  return href?.trim() ?? null;
+}
+
+function getSafeMarkdownImageSrc(src: string | undefined) {
+  const trimmedSrc = src?.trim() ?? '';
+  return isValidImageSource(trimmedSrc) ? trimmedSrc : null;
+}
+
+function copyWithTextareaFallback(text: string) {
   const textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.setAttribute('readonly', 'true');
@@ -26,12 +102,27 @@ async function copyToClipboard(text: string) {
   document.body.appendChild(textarea);
   textarea.select();
 
-  const copied = document.execCommand('copy');
-  document.body.removeChild(textarea);
-
-  if (!copied) {
-    throw new Error('copy failed');
+  try {
+    const copied = document.execCommand('copy');
+    if (!copied) {
+      throw new Error('copy failed');
+    }
+  } finally {
+    document.body.removeChild(textarea);
   }
+}
+
+async function copyToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Fall back to the textarea copy path when async clipboard access is blocked.
+    }
+  }
+
+  copyWithTextareaFallback(text);
 }
 
 function getNodeTextContent(node: ReactNode): string {
@@ -181,16 +272,16 @@ interface MarkdownImageProps extends ImgHTMLAttributes<HTMLImageElement> {
 }
 
 function MarkdownImage({ theme, src, alt = '', ...props }: MarkdownImageProps) {
-  const cachedDimensions = src ? imageDimensionsCache.get(src) ?? null : null;
+  const cachedDimensions = src ? touchCachedValue(imageDimensionsCache, src) : null;
   const [dimensions, setDimensions] = useState(cachedDimensions);
-  const [loaded, setLoaded] = useState(src ? loadedMarkdownImageCache.has(src) : false);
+  const [loaded, setLoaded] = useState(src ? touchCachedSetValue(loadedMarkdownImageCache, src) : false);
 
   useEffect(() => {
     if (!src) {
       return;
     }
 
-    const existingDimensions = imageDimensionsCache.get(src);
+    const existingDimensions = touchCachedValue(imageDimensionsCache, src);
     if (existingDimensions) {
       setDimensions(existingDimensions);
       return;
@@ -209,7 +300,7 @@ function MarkdownImage({ theme, src, alt = '', ...props }: MarkdownImageProps) {
         height: image.naturalHeight,
       };
 
-      imageDimensionsCache.set(src, nextDimensions);
+      rememberImageDimensions(src, nextDimensions);
       setDimensions(nextDimensions);
     };
 
@@ -232,7 +323,7 @@ function MarkdownImage({ theme, src, alt = '', ...props }: MarkdownImageProps) {
       return;
     }
 
-    setLoaded(loadedMarkdownImageCache.has(src));
+    setLoaded(touchCachedSetValue(loadedMarkdownImageCache, src));
   }, [src]);
 
   if (!src) {
@@ -261,7 +352,7 @@ function MarkdownImage({ theme, src, alt = '', ...props }: MarkdownImageProps) {
         loading="eager"
         decoding="sync"
         onLoad={() => {
-          loadedMarkdownImageCache.add(src);
+          rememberLoadedImage(src);
           setLoaded(true);
         }}
         style={{
@@ -304,6 +395,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
     <div className={`markdown-prose ${className}`} style={proseStyle}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        urlTransform={(value) => value}
         components={{
           h1: ({ ...props }) => (
             <h1
@@ -386,20 +478,30 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
               {...props}
             />
           ),
-          a: ({ ...props }) => (
-            <a
-              style={{
-                color: theme.colors.primary,
-                textDecoration: 'underline',
-                textUnderlineOffset: '0.18em',
-              }}
-              target="_blank"
-              rel="noreferrer"
-              {...props}
-            />
-          ),
-          img: ({ ...props }) => (
-            <MarkdownImage theme={theme} {...props} />
+          a: ({ href, children, ...props }) => {
+            const safeHref = getSafeMarkdownLinkHref(href);
+            if (!safeHref) {
+              return <span {...props}>{children}</span>;
+            }
+
+            return (
+              <a
+                {...props}
+                href={safeHref}
+                style={{
+                  color: theme.colors.primary,
+                  textDecoration: 'underline',
+                  textUnderlineOffset: '0.18em',
+                }}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                {children}
+              </a>
+            );
+          },
+          img: ({ src, ...props }) => (
+            <MarkdownImage theme={theme} src={getSafeMarkdownImageSrc(src) ?? undefined} {...props} />
           ),
           code: ({ className: codeClassName, children, ...props }: HTMLAttributes<HTMLElement>) => {
             const codeText = getNodeTextContent(children);

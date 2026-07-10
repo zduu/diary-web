@@ -1,5 +1,6 @@
 import type { ThemeConfig } from '../../hooks/useTheme';
 import type { DiaryEntry } from '../../types/index.ts';
+import { sanitizeEntryContent, sanitizeEntryHidden, sanitizeEntryTitle } from '../../utils/entryTextValidation.ts';
 import type {
   AdminTextColorGetter,
   OperationState,
@@ -40,16 +41,16 @@ interface AdminEntryListItemProps {
   operationState: OperationState;
   timestampLabel: string;
   onEdit?: () => void;
-  onToggleVisibility: () => void;
-  onDelete: () => void;
+  onToggleVisibility?: () => void;
+  onDelete?: () => void;
 }
 
 interface EntryActionButtonsProps {
   entry: DiaryEntry;
   operationState: OperationState;
   onEdit?: () => void;
-  onToggleVisibility: () => void;
-  onDelete: () => void;
+  onToggleVisibility?: () => void;
+  onDelete?: () => void;
   theme: ThemeConfig;
 }
 
@@ -61,6 +62,7 @@ interface ActionButtonProps {
   title: string;
   variant: 'primary' | 'secondary' | 'danger';
   theme: ThemeConfig;
+  disabledTitle?: string;
 }
 
 interface EntryActionConfig {
@@ -70,6 +72,7 @@ interface EntryActionConfig {
   loading: boolean;
   icon: React.ReactNode;
   title: string;
+  disabledTitle?: string;
   variant: ActionButtonProps['variant'];
 }
 
@@ -198,11 +201,15 @@ export function AdminEntryListItem({
   onToggleVisibility,
   onDelete,
 }: AdminEntryListItemProps) {
+  const entryTitle = sanitizeEntryTitle(entry.title);
+  const entryContent = sanitizeEntryContent(entry.content);
+  const isHidden = sanitizeEntryHidden(entry.hidden);
+
   return (
     <div
       className="admin-entry-shell flex items-center justify-between rounded-lg border p-3"
       style={{
-        backgroundColor: entry.hidden 
+        backgroundColor: isHidden
           ? (theme.mode === 'dark' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255, 0, 0, 0.1)')
           : theme.colors.surface,
         borderColor: theme.colors.border,
@@ -210,16 +217,16 @@ export function AdminEntryListItem({
     >
       <div className="min-w-0 flex-1">
         <div className="font-medium" style={{ color: getTextColor('primary') }}>
-          {entry.title || '无标题'}
-          {entry.hidden && (
+          {entryTitle}
+          {isHidden && (
             <span className="ml-2 rounded bg-red-500 px-2 py-1 text-xs text-white">
               隐藏
             </span>
           )}
         </div>
         <div className="truncate text-sm" style={{ color: getTextColor('secondary') }}>
-          {entry.content.substring(0, 50)}
-          {entry.content.length > 50 && '...'}
+          {entryContent.substring(0, 50)}
+          {entryContent.length > 50 && '...'}
         </div>
         <div className="mt-1 text-xs" style={{ color: getTextColor('secondary') }}>
           {timestampLabel}
@@ -247,6 +254,7 @@ function EntryActionButtons({
   theme,
 }: EntryActionButtonsProps) {
   const isOperating = operationState !== 'idle';
+  const isHidden = sanitizeEntryHidden(entry.hidden);
   const actions: EntryActionConfig[] = [];
 
   if (onEdit) {
@@ -264,20 +272,22 @@ function EntryActionButtons({
   actions.push(
     {
       key: 'visibility',
-      onClick: onToggleVisibility,
-      disabled: isOperating,
+      onClick: onToggleVisibility ?? (() => {}),
+      disabled: isOperating || !onToggleVisibility,
       loading: operationState === 'hiding' || operationState === 'showing',
-      icon: <span className="text-xs font-medium">{entry.hidden ? '显' : '隐'}</span>,
-      title: entry.hidden ? '显示日记' : '隐藏日记',
+      icon: <span className="text-xs font-medium">{isHidden ? '显' : '隐'}</span>,
+      title: isHidden ? '显示日记' : '隐藏日记',
+      disabledTitle: onToggleVisibility ? '操作进行中...' : '缺少日记 ID，无法切换显示状态',
       variant: 'secondary',
     },
     {
       key: 'delete',
-      onClick: onDelete,
-      disabled: isOperating,
+      onClick: onDelete ?? (() => {}),
+      disabled: isOperating || !onDelete,
       loading: operationState === 'deleting',
       icon: <span className="text-xs font-medium">删</span>,
       title: '删除日记',
+      disabledTitle: onDelete ? '操作进行中...' : '缺少日记 ID，无法删除',
       variant: 'danger',
     },
   );
@@ -292,6 +302,7 @@ function EntryActionButtons({
           loading={action.loading}
           icon={action.icon}
           title={action.title}
+          disabledTitle={action.disabledTitle}
           variant={action.variant}
           theme={theme}
         />
@@ -306,6 +317,7 @@ function ActionButton({
   loading = false,
   icon,
   title,
+  disabledTitle,
   variant,
   theme,
 }: ActionButtonProps) {
@@ -316,7 +328,7 @@ function ActionButton({
       disabled={disabled}
       className="p-2 rounded hover:bg-opacity-80 transition-colors relative"
       style={getActionButtonStyle(variant, theme, disabled)}
-      title={disabled ? '操作进行中...' : title}
+      title={disabled ? (disabledTitle ?? '操作进行中...') : title}
     >
       {loading ? (
         <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />

@@ -3,27 +3,40 @@ import { useThemeContext } from './ThemeProvider';
 import { LazyMarkdownRenderer } from './LazyMarkdownRenderer';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { debugError, debugWarn } from '../utils/logger.ts';
+import type { ThemeConfig } from '../hooks/useTheme';
 
 interface MarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  maxLength?: number;
 }
 
-export function MarkdownEditor({ value, onChange, placeholder }: MarkdownEditorProps) {
+export function MarkdownEditor({ value, onChange, placeholder, maxLength }: MarkdownEditorProps) {
   const { theme } = useThemeContext();
   const isMobile = useIsMobile();
   const [mode, setMode] = useState<'edit' | 'preview' | 'split'>('edit');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isMountedRef = useRef(false);
+  const selectionRestoreTimeoutRef = useRef<number | null>(null);
   const [isComponentMounted, setIsComponentMounted] = useState(false);
+
+  const clearPendingSelectionRestore = useCallback(() => {
+    if (selectionRestoreTimeoutRef.current !== null) {
+      window.clearTimeout(selectionRestoreTimeoutRef.current);
+      selectionRestoreTimeoutRef.current = null;
+    }
+  }, []);
 
   // 组件挂载状态管理
   useEffect(() => {
+    isMountedRef.current = true;
     setIsComponentMounted(true);
     return () => {
-      setIsComponentMounted(false);
+      isMountedRef.current = false;
+      clearPendingSelectionRestore();
     };
-  }, []);
+  }, [clearPendingSelectionRestore]);
 
   useEffect(() => {
     if (isMobile && mode === 'split') {
@@ -32,7 +45,7 @@ export function MarkdownEditor({ value, onChange, placeholder }: MarkdownEditorP
   }, [isMobile, mode]);
 
   const insertMarkdown = useCallback((before: string, after: string = '') => {
-    if (!isComponentMounted) return;
+    if (!isMountedRef.current) return;
 
     const textarea = textareaRef.current;
     if (!textarea) return;
@@ -43,11 +56,14 @@ export function MarkdownEditor({ value, onChange, placeholder }: MarkdownEditorP
       const selectedText = value.substring(start, end);
       const newText = value.substring(0, start) + before + selectedText + after + value.substring(end);
 
-      onChange(newText);
+      onChange(maxLength === undefined ? newText : newText.slice(0, maxLength));
 
       // 重新设置光标位置
-      setTimeout(() => {
-        if (isComponentMounted && textarea) {
+      clearPendingSelectionRestore();
+      selectionRestoreTimeoutRef.current = window.setTimeout(() => {
+        selectionRestoreTimeoutRef.current = null;
+
+        if (isMountedRef.current && textareaRef.current === textarea) {
           textarea.focus();
           textarea.setSelectionRange(start + before.length, start + before.length + selectedText.length);
         }
@@ -55,7 +71,7 @@ export function MarkdownEditor({ value, onChange, placeholder }: MarkdownEditorP
     } catch (error) {
       debugError('插入Markdown语法失败:', error);
     }
-  }, [value, onChange, isComponentMounted]);
+  }, [clearPendingSelectionRestore, maxLength, value, onChange]);
 
   const handleModeChange = useCallback((e: React.MouseEvent, newMode: 'edit' | 'preview' | 'split') => {
     e.preventDefault();
@@ -63,7 +79,7 @@ export function MarkdownEditor({ value, onChange, placeholder }: MarkdownEditorP
 
     try {
       // 确保组件已挂载
-      if (!isComponentMounted) {
+      if (!isMountedRef.current) {
         debugWarn('组件未挂载，无法切换模式');
         return;
       }
@@ -76,7 +92,7 @@ export function MarkdownEditor({ value, onChange, placeholder }: MarkdownEditorP
       debugError('切换编辑模式失败:', error);
       // 如果切换失败，保持当前模式
     }
-  }, [mode, isComponentMounted]);
+  }, [mode]);
 
   const toolbarButtons = [
     { label: 'B', action: () => insertMarkdown('**', '**'), title: '粗体' },
@@ -181,7 +197,8 @@ export function MarkdownEditor({ value, onChange, placeholder }: MarkdownEditorP
               data-diary-content-input="true"
               aria-label="日记内容编辑器"
               value={value}
-              onChange={(e) => onChange(e.target.value)}
+              maxLength={maxLength}
+              onChange={(e) => onChange(maxLength === undefined ? e.target.value : e.target.value.slice(0, maxLength))}
               placeholder={placeholder || '开始写作...支持 Markdown 语法'}
               className={`w-full rounded-lg border p-4 ${isMobile ? 'text-base' : ''} resize-none transition-colors focus:outline-none focus:ring-2`}
               style={{
@@ -239,7 +256,7 @@ export function MarkdownEditor({ value, onChange, placeholder }: MarkdownEditorP
 }
 
 // 独立的预览区域组件，使用React.memo优化性能
-const PreviewArea = React.memo(({ value, theme, height }: { value: string; theme: any; height: string }) => {
+const PreviewArea = React.memo(({ value, theme, height }: { value: string; theme: ThemeConfig; height: string }) => {
   const previewContent = value || '*预览区域*\n\n在左侧编辑器中输入 Markdown 内容，这里会实时显示渲染结果。';
 
   return (

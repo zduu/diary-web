@@ -54,11 +54,19 @@ export function PasswordProtection({ onAuthenticated, passwordSettings }: Passwo
     };
   }, []);
 
+  // 使用 ref 保持 onAuthenticated 引用稳定，避免父组件每次渲染传入新函数引用
+  // 导致 effect 不必要的重新执行或潜在的无限循环
+  const onAuthenticatedRef = useRef(onAuthenticated);
+
+  useEffect(() => {
+    onAuthenticatedRef.current = onAuthenticated;
+  }, [onAuthenticated]);
+
   useEffect(() => {
     if (!passwordSettings.enabled) {
-      onAuthenticated();
+      onAuthenticatedRef.current();
     }
-  }, [onAuthenticated, passwordSettings.enabled]);
+  }, [passwordSettings.enabled]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,7 +75,7 @@ export function PasswordProtection({ onAuthenticated, passwordSettings }: Passwo
 
     try {
       await apiService.loginApp(password);
-      onAuthenticated();
+      onAuthenticatedRef.current();
     } catch (error) {
       safeSetError(error instanceof Error ? error.message : '验证失败，请重试');
       safeSetPassword('');

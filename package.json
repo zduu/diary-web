@@ -49,6 +49,10 @@
     "react-markdown": "^9.0.1",
     "remark-gfm": "^4.0.0"
   },
+  "overrides": {
+    "esbuild": "^0.28.1",
+    "ws": "^8.21.0"
+  },
   "devDependencies": {
     "@capacitor/android": "^8.3.0",
     "@capacitor/cli": "^8.3.0",

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getManualInstallHint, useInstallPrompt } from './useInstallPrompt';
@@ -46,6 +46,84 @@ describe('useInstallPrompt', () => {
       expect(screen.getByTestId('outcome')).toHaveTextContent('accepted');
       expect(screen.getByTestId('can-install')).toHaveTextContent('no');
     });
+  });
+
+  it('clears a captured install prompt when standalone mode becomes active', async () => {
+    const promptEvent = new Event('beforeinstallprompt');
+
+    Object.defineProperty(promptEvent, 'prompt', { value: vi.fn().mockResolvedValue(undefined) });
+    Object.defineProperty(promptEvent, 'userChoice', {
+      value: Promise.resolve({ outcome: 'dismissed' as const, platform: 'web' }),
+    });
+
+    const { rerender } = render(<InstallPromptProbe />);
+
+    window.dispatchEvent(promptEvent);
+    await waitFor(() => {
+      expect(screen.getByTestId('can-install')).toHaveTextContent('yes');
+    });
+
+    rerender(<InstallPromptProbe isStandalone />);
+    await waitFor(() => {
+      expect(screen.getByTestId('can-install')).toHaveTextContent('no');
+    });
+
+    rerender(<InstallPromptProbe />);
+
+    expect(screen.getByTestId('can-install')).toHaveTextContent('no');
+  });
+
+  it('does not call the same browser install prompt twice while prompting', async () => {
+    let resolvePrompt!: () => void;
+    const prompt = vi.fn(() => new Promise<void>((resolve) => {
+      resolvePrompt = resolve;
+    }));
+    const promptEvent = new Event('beforeinstallprompt');
+
+    Object.defineProperty(promptEvent, 'prompt', { value: prompt });
+    Object.defineProperty(promptEvent, 'userChoice', {
+      value: Promise.resolve({ outcome: 'dismissed' as const, platform: 'web' }),
+    });
+
+    render(<InstallPromptProbe />);
+
+    window.dispatchEvent(promptEvent);
+    await waitFor(() => {
+      expect(screen.getByTestId('can-install')).toHaveTextContent('yes');
+    });
+
+    const button = screen.getByRole('button', { name: '安装应用' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(prompt).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(screen.getByTestId('can-install')).toHaveTextContent('no');
+    });
+
+    resolvePrompt();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('outcome')).toHaveTextContent('dismissed');
+    });
+  });
+
+  it('removes install prompt listeners on unmount', () => {
+    const addEventListener = vi.spyOn(window, 'addEventListener');
+    const removeEventListener = vi.spyOn(window, 'removeEventListener');
+
+    const { unmount } = render(<InstallPromptProbe />);
+    unmount();
+
+    const beforeInstallPromptListener = addEventListener.mock.calls.find(
+      ([eventName]) => eventName === 'beforeinstallprompt'
+    )?.[1];
+    const appInstalledListener = addEventListener.mock.calls.find(
+      ([eventName]) => eventName === 'appinstalled'
+    )?.[1];
+
+    expect(removeEventListener).toHaveBeenCalledWith('beforeinstallprompt', beforeInstallPromptListener);
+    expect(removeEventListener).toHaveBeenCalledWith('appinstalled', appInstalledListener);
   });
 
   it('returns a manual ios install hint when the install prompt is unavailable', () => {

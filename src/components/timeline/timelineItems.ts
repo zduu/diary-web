@@ -2,9 +2,10 @@ import type { DiaryEntry } from '../../types/index.ts';
 import {
   formatTimelineDate,
   getSmartTimeDisplay,
-  normalizeTimeString,
   type TimeDisplay,
 } from '../../utils/timeUtils.ts';
+import { getDiaryEntryKey } from '../../utils/diaryEntryIdentity.ts';
+import { compareDiaryEntriesByTime } from '../../utils/entryTime.ts';
 
 export interface TimelineDateItem {
   type: 'date';
@@ -46,10 +47,6 @@ export function groupEntriesByDate(entries: DiaryEntry[]): Record<string, DiaryE
   const groups: Record<string, DiaryEntry[]> = {};
 
   entries.forEach((entry) => {
-    if (!entry.created_at) {
-      return;
-    }
-
     const dateGroup = formatTimelineDate(entry.created_at);
 
     if (!groups[dateGroup]) {
@@ -60,19 +57,20 @@ export function groupEntriesByDate(entries: DiaryEntry[]): Record<string, DiaryE
   });
 
   Object.keys(groups).forEach((key) => {
-    groups[key].sort(
-      (a, b) =>
-        new Date(normalizeTimeString(b.created_at!)).getTime() -
-        new Date(normalizeTimeString(a.created_at!)).getTime()
-    );
+    groups[key].sort(compareDiaryEntriesByTime);
   });
 
-  return groups;
+  return Object.fromEntries(
+    Object.entries(groups).sort(([, aEntries], [, bEntries]) =>
+      compareDiaryEntriesByTime(aEntries[0]!, bEntries[0]!)
+    )
+  );
 }
 
 export function createTimelineItems(entries: DiaryEntry[]): TimelineListItem[] {
   const groupedEntries = groupEntriesByDate(entries);
   const items: TimelineListItem[] = [];
+  let fallbackEntryIndex = 0;
 
   Object.entries(groupedEntries).forEach(([dateGroup, groupedDateEntries], dateIndex) => {
     items.push({
@@ -87,19 +85,22 @@ export function createTimelineItems(entries: DiaryEntry[]): TimelineListItem[] {
     });
 
     groupedDateEntries.forEach((entry, entryIndex) => {
+      const entryKeySegment = getDiaryEntryKey(entry, fallbackEntryIndex);
+      fallbackEntryIndex += 1;
+
       if (entryIndex > 0) {
         items.push({
           type: 'time',
-          key: `time-${entry.id}`,
+          key: `time-${dateGroup}-${entryKeySegment}`,
           data: {
-            timeDisplay: getSmartTimeDisplay(entry.created_at!),
+            timeDisplay: getSmartTimeDisplay(entry.created_at),
           },
         });
       }
 
       items.push({
         type: 'entry',
-        key: `entry-${entry.id}`,
+        key: `entry-${dateGroup}-${entryKeySegment}`,
         data: entry,
       });
     });

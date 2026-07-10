@@ -1,4 +1,6 @@
 import { debugLog, debugWarn } from './logger.ts';
+import { formatMeters } from './numberFormat.ts';
+import { isValidCoordinatePair } from './geoCoordinates.ts';
 
 /**
  * 坐标系转换工具
@@ -274,6 +276,74 @@ interface HighAccuracyLocationResult extends ConversionResult {
   confidence: 'high' | 'medium' | 'low';
 }
 
+function createAbortError() {
+  return new DOMException('定位已取消', 'AbortError');
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+}
+
+function waitForRetry(delayMs: number, signal?: AbortSignal) {
+  throwIfAborted(signal);
+
+  return new Promise<void>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      signal?.removeEventListener('abort', handleAbort);
+      resolve();
+    }, delayMs);
+
+    const handleAbort = () => {
+      clearTimeout(timeoutId);
+      reject(createAbortError());
+    };
+
+    signal?.addEventListener('abort', handleAbort, { once: true });
+  });
+}
+
+function normalizeGeolocationAccuracy(value: number | null) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 999;
+}
+
+function getCurrentPositionWithSignal(
+  options: PositionOptions,
+  signal?: AbortSignal
+) {
+  throwIfAborted(signal);
+
+  return new Promise<GeolocationPosition>((resolve, reject) => {
+    const handleAbort = () => {
+      reject(createAbortError());
+    };
+
+    signal?.addEventListener('abort', handleAbort, { once: true });
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        signal?.removeEventListener('abort', handleAbort);
+        if (signal?.aborted) {
+          reject(createAbortError());
+          return;
+        }
+
+        resolve(position);
+      },
+      (error) => {
+        signal?.removeEventListener('abort', handleAbort);
+        reject(error);
+      },
+      options
+    );
+  });
+}
+
 /**
  * 多重定位策略 - 提高定位精度
  * 通过多次定位、多种方式组合来提高精度
@@ -284,15 +354,18 @@ export async function getHighAccuracyLocation(
     timeout?: number;
     acceptableAccuracy?: number;
     targetSystem?: CoordinateSystem;
+    signal?: AbortSignal;
   } = {}
 ): Promise<HighAccuracyLocationResult> {
   const {
     maxAttempts = 3,
     timeout = 10000,
     acceptableAccuracy = 50,
-    targetSystem = 'GCJ02'
+    targetSystem = 'GCJ02',
+    signal
   } = options;
 
+  throwIfAborted(signal);
   debugLog('🎯 开始高精度定位，目标精度:', acceptableAccuracy, '米');
 
   const attempts: Array<{
@@ -307,19 +380,31 @@ export async function getHighAccuracyLocation(
     try {
       debugLog(`📡 第${i + 1}/${maxAttempts}次GPS定位尝试...`);
 
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
+      const position = await getCurrentPositionWithSignal(
+        {
           enableHighAccuracy: true,
           timeout: timeout,
           maximumAge: 0
-        });
-      });
+        },
+        signal
+      );
 
       const { latitude, longitude, accuracy } = position.coords;
+      if (!isValidCoordinatePair(latitude, longitude)) {
+        debugWarn(`❌ 第${i + 1}次定位坐标无效:`, { latitude, longitude });
+
+        if (i < maxAttempts - 1) {
+          await waitForRetry(2000, signal);
+        }
+
+        continue;
+      }
+
+      const normalizedAccuracy = normalizeGeolocationAccuracy(accuracy);
       const attempt = {
         latitude,
         longitude,
-        accuracy: accuracy || 999,
+        accuracy: normalizedAccuracy,
         timestamp: position.timestamp
       };
 
@@ -327,21 +412,25 @@ export async function getHighAccuracyLocation(
 
       debugLog(`📍 第${i + 1}次定位结果:`, {
         coordinates: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
-        accuracy: `${accuracy?.toFixed(1)}米`
+        accuracy: formatMeters(normalizedAccuracy)
       });
 
       // 如果精度已经足够好，可以提前结束
-      if (accuracy && accuracy <= acceptableAccuracy) {
+      if (normalizedAccuracy <= acceptableAccuracy) {
         debugLog('✅ 达到目标精度，提前结束定位');
         break;
       }
 
       // 等待一段时间再进行下次定位
       if (i < maxAttempts - 1) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await waitForRetry(2000, signal);
       }
 
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+
       debugWarn(`❌ 第${i + 1}次定位失败:`, error);
     }
   }
@@ -376,7 +465,7 @@ export async function getHighAccuracyLocation(
 
   debugLog('🎯 高精度定位完成:', {
     finalCoordinates: `${result.latitude.toFixed(6)}, ${result.longitude.toFixed(6)}`,
-    accuracy: result.accuracy ? `${result.accuracy.toFixed(1)}米` : '未知',
+    accuracy: formatMeters(result.accuracy),
     confidence: result.confidence,
     attempts: result.attempts
   });

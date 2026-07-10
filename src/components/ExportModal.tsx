@@ -16,6 +16,7 @@ import {
   exportFormatOptions,
   packageDiaryEntryImagesForExport,
 } from '../utils/exportUtils';
+import { sanitizeEntryHidden } from '../utils/entryTextValidation.ts';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -36,9 +37,20 @@ export function ExportModal({ isOpen, onClose, entries, exportType }: ExportModa
 
   if (!isOpen) return null;
 
-  const visibleEntries = includeHidden ? entries : entries.filter(entry => !entry.hidden);
+  const visibleEntries = includeHidden ? entries : entries.filter(entry => !sanitizeEntryHidden(entry.hidden));
+  const handleRequestClose = () => {
+    if (isExporting) {
+      return;
+    }
+
+    onClose();
+  };
 
   const handleExport = async () => {
+    if (isExporting) {
+      return;
+    }
+
     if (visibleEntries.length === 0) {
       showNotification('没有可导出的日记！', 'error');
       return;
@@ -117,7 +129,7 @@ export function ExportModal({ isOpen, onClose, entries, exportType }: ExportModa
   return (
     <ModalShell
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleRequestClose}
       ariaLabelledby="export-modal-title"
       initialFocusRef={exportButtonRef}
       zIndex={50}
@@ -131,7 +143,7 @@ export function ExportModal({ isOpen, onClose, entries, exportType }: ExportModa
         border: `1px solid ${theme.colors.border}`,
       }}
     >
-      <ModalHeader titleId="export-modal-title" title={`导出${exportType}`} onClose={onClose} />
+      <ModalHeader titleId="export-modal-title" title={`导出${exportType}`} onClose={handleRequestClose} />
 
       <div className="space-y-6 p-6">
         <div className="rounded-lg p-4" style={{ backgroundColor: `${theme.colors.primary}10` }}>
@@ -214,7 +226,7 @@ export function ExportModal({ isOpen, onClose, entries, exportType }: ExportModa
 
       <div className="flex gap-3 border-t p-6" style={{ borderColor: theme.colors.border }}>
         <button
-          onClick={onClose}
+          onClick={handleRequestClose}
           disabled={isExporting}
           className="flex-1 rounded-lg border px-4 py-2 transition-colors"
           style={{

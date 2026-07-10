@@ -117,4 +117,87 @@ describe('QuickFilters', () => {
     expect(screen.getByRole('button', { name: '4月' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '12月' })).not.toBeInTheDocument();
   });
+
+  it('excludes entries with invalid timestamps from date-filtered quick results', async () => {
+    const invalidDateEntry: DiaryEntry = {
+      id: 4,
+      title: '坏日期',
+      content: '日期不可用',
+      content_type: 'markdown',
+      mood: 'happy',
+      weather: 'sunny',
+      tags: ['公开'],
+      images: [],
+      location: null,
+      hidden: false,
+      created_at: 'not-a-date',
+      updated_at: 'not-a-date',
+    };
+    const onFilterResults = vi.fn();
+
+    renderWithTheme(
+      <QuickFilters
+        entries={[...sampleEntries, invalidDateEntry]}
+        enabled
+        isAdminAuthenticated={false}
+        availableTags={['公开']}
+        availableYears={['2026']}
+        availableMonths={['04']}
+        availableMonthsByYear={{ '2026': ['04'] }}
+        untaggedEntryCount={0}
+        onFilterResults={onFilterResults}
+        onClearFilter={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '所有年份' }));
+    fireEvent.click(screen.getByRole('button', { name: '2026年' }));
+
+    await waitFor(() => {
+      expect(onFilterResults).toHaveBeenLastCalledWith([sampleEntries[0]]);
+    });
+  });
+
+  it('sanitizes malformed legacy tags before building options and filtering', async () => {
+    const legacyEntry: DiaryEntry = {
+      id: 4,
+      title: '旧标签',
+      content: '标签字段包含脏数据',
+      content_type: 'markdown',
+      mood: 'happy',
+      weather: 'sunny',
+      tags: ['  公开  ', 123, '', '公开'] as unknown as string[],
+      images: [],
+      location: null,
+      hidden: false,
+      created_at: '2026-04-15T09:00:00.000Z',
+      updated_at: '2026-04-15T09:00:00.000Z',
+    };
+    const onFilterResults = vi.fn();
+
+    renderWithTheme(
+      <QuickFilters
+        entries={[legacyEntry]}
+        enabled
+        isAdminAuthenticated={false}
+        availableTags={['公开', '']}
+        availableYears={['2026']}
+        availableMonths={['04']}
+        availableMonthsByYear={{ '2026': ['04'] }}
+        untaggedEntryCount={0}
+        onFilterResults={onFilterResults}
+        onClearFilter={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /选择标签/i }));
+    expect(screen.getAllByRole('button', { name: '#公开' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: '#' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: '#公开' })[0]!);
+
+    await waitFor(() => {
+      expect(onFilterResults).toHaveBeenLastCalledWith([legacyEntry]);
+    });
+  });
 });

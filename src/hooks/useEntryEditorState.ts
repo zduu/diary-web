@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DiaryEntry } from '../types/index.ts';
+import { hasPersistedDiaryEntryId } from '../utils/diaryEntryIdentity.ts';
 
 export function useEntryEditorState() {
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -52,9 +53,14 @@ export function useEntryEditorState() {
   };
 
   const openEditEntry = (entry: DiaryEntry) => {
+    if (!hasPersistedDiaryEntryId(entry)) {
+      return false;
+    }
+
     clearPendingEditingReset();
     setEditingEntry(entry);
     setIsFormOpen(true);
+    return true;
   };
 
   const closeForm = () => {

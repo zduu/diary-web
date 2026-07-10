@@ -1,14 +1,22 @@
 import type { ThemeMode } from '../../hooks/useTheme';
+import type {
+  AMapGeolocationControl,
+  AMapMap,
+  AMapOverlay,
+  AMapPlaceSearch,
+  AMapRuntimeSdk,
+} from './amapTypes';
 
 interface LoadAmapScriptOptions {
   jsKey: string;
   securityCode?: string;
   onLoad: () => void;
   onError: (error: unknown, script: HTMLScriptElement) => void;
+  timeoutMs?: number;
 }
 
 interface CreateMapInstanceOptions {
-  AMap: any;
+  AMap: AMapRuntimeSdk;
   container: HTMLDivElement;
   center: [number, number];
   isMobile: boolean;
@@ -16,9 +24,9 @@ interface CreateMapInstanceOptions {
 }
 
 interface CleanupMapRuntimeOptions {
-  map: any;
-  marker: any;
-  userMarker: any;
+  map: AMapMap | null;
+  marker: AMapOverlay | null;
+  userMarker: AMapOverlay | null;
 }
 
 export function loadAmapScript({
@@ -26,16 +34,39 @@ export function loadAmapScript({
   securityCode,
   onLoad,
   onError,
+  timeoutMs = 15_000,
 }: LoadAmapScriptOptions): HTMLScriptElement {
   (window as Window & { _AMapSecurityConfig?: { securityJsCode?: string } })._AMapSecurityConfig = {
     securityJsCode: securityCode,
   };
 
   const script = document.createElement('script');
+  let settled = false;
+
+  const cleanup = () => {
+    window.clearTimeout(timeoutId);
+    script.onload = null;
+    script.onerror = null;
+  };
+
+  const settle = (callback: () => void) => {
+    if (settled) {
+      return;
+    }
+
+    settled = true;
+    cleanup();
+    callback();
+  };
+
+  const timeoutId = window.setTimeout(() => {
+    settle(() => onError(new Error('地图脚本加载超时'), script));
+  }, timeoutMs);
+
   script.src = `https://webapi.amap.com/maps?v=2.0&key=${jsKey}&plugin=AMap.PlaceSearch,AMap.Geocoder,AMap.AutoComplete`;
   script.async = true;
-  script.onload = onLoad;
-  script.onerror = (error) => onError(error, script);
+  script.onload = () => settle(onLoad);
+  script.onerror = (error) => settle(() => onError(error, script));
   document.head.appendChild(script);
   return script;
 }
@@ -46,7 +77,7 @@ export function createMapInstance({
   center,
   isMobile,
   themeMode,
-}: CreateMapInstanceOptions) {
+}: CreateMapInstanceOptions): AMapMap {
   return new AMap.Map(container, {
     zoom: isMobile ? 15 : 16,
     center,
@@ -63,7 +94,7 @@ export function createMapInstance({
   });
 }
 
-export function createPlaceSearchService(AMap: any, map: any) {
+export function createPlaceSearchService(AMap: AMapRuntimeSdk, map: AMapMap): AMapPlaceSearch {
   return new AMap.PlaceSearch({
     pageSize: 10,
     pageIndex: 1,
@@ -73,7 +104,7 @@ export function createPlaceSearchService(AMap: any, map: any) {
   });
 }
 
-export function createGeolocationControl(AMap: any) {
+export function createGeolocationControl(AMap: AMapRuntimeSdk): AMapGeolocationControl {
   return new AMap.Geolocation({
     enableHighAccuracy: true,
     timeout: 8000,

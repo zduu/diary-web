@@ -2,6 +2,7 @@ import { Clock3, Compass, History, Sparkles, Tag } from 'lucide-react';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { useThemeContext } from '../ThemeProvider';
 import type { DiaryEntry } from '../../types/index.ts';
+import { sanitizeEntryTags, sanitizeEntryTitle } from '../../utils/entryTextValidation.ts';
 import type { EntryRecommendation } from '../../utils/recommendationUtils.ts';
 import { formatFullDateTime } from '../../utils/timeUtils.ts';
 import {
@@ -91,7 +92,8 @@ export function RecommendationsPanel({
       <div className={`mt-4 grid gap-3 ${isMobile ? 'grid-cols-1' : 'md:grid-cols-3'}`}>
         {recommendations.map((recommendation) => {
           const Icon = getRecommendationIcon(recommendation.label);
-          const entryTitle = recommendation.entry.title?.trim() || '未命名日记';
+          const entryTitle = sanitizeEntryTitle(recommendation.entry.title, '未命名日记');
+          const entryTags = sanitizeEntryTags(recommendation.entry.tags);
 
           return (
             <article
@@ -127,9 +129,9 @@ export function RecommendationsPanel({
                 {recommendation.description}
               </p>
 
-              {recommendation.entry.tags && recommendation.entry.tags.length > 0 && (
+              {entryTags.length > 0 && (
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {recommendation.entry.tags.slice(0, isMobile ? 3 : 4).map((tag) => (
+                  {entryTags.slice(0, isMobile ? 3 : 4).map((tag) => (
                     <span
                       key={`${recommendation.id}-${tag}`}
                       className="rounded-full px-2.5 py-1 text-xs"

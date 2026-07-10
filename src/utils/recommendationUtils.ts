@@ -1,5 +1,9 @@
 import type { DiaryEntry } from '../types/index.ts';
-import { normalizeTimeString } from './timeUtils.ts';
+import { getDiaryEntryKey } from './diaryEntryIdentity.ts';
+import { sanitizeEntryContent, sanitizeEntryTags } from './entryTextValidation.ts';
+import { getEntryTimestamp } from './entryTime.ts';
+import { isValidImageSource } from './imageSourceValidation.ts';
+import { isValidLocationInfo } from './importUtils.ts';
 
 export interface EntryRecommendation {
   id: string;
@@ -9,13 +13,9 @@ export interface EntryRecommendation {
   entry: DiaryEntry;
 }
 
-function getEntryTimestamp(entry: DiaryEntry): number | null {
-  if (!entry.created_at) {
-    return null;
-  }
-
-  const timestamp = new Date(normalizeTimeString(entry.created_at)).getTime();
-  return Number.isFinite(timestamp) ? timestamp : null;
+interface RecommendationCandidate {
+  entry: DiaryEntry;
+  key: string;
 }
 
 function truncateText(value: string, maxLength: number) {
@@ -26,14 +26,18 @@ function truncateText(value: string, maxLength: number) {
   return `${value.slice(0, maxLength).trim()}...`;
 }
 
-function sortEntries(entries: DiaryEntry[]) {
-  return [...entries]
-    .filter((entry) => getEntryTimestamp(entry) !== null)
-    .sort((left, right) => (getEntryTimestamp(right) ?? 0) - (getEntryTimestamp(left) ?? 0));
+function sortEntries(entries: DiaryEntry[]): RecommendationCandidate[] {
+  return entries
+    .map((entry, index) => ({
+      entry,
+      key: getDiaryEntryKey(entry, index),
+    }))
+    .filter(({ entry }) => getEntryTimestamp(entry.created_at) !== null)
+    .sort((left, right) => (getEntryTimestamp(right.entry.created_at) ?? 0) - (getEntryTimestamp(left.entry.created_at) ?? 0));
 }
 
 function isOlderThanDays(entry: DiaryEntry, now: Date, days: number) {
-  const timestamp = getEntryTimestamp(entry);
+  const timestamp = getEntryTimestamp(entry.created_at);
   if (timestamp === null) {
     return false;
   }
@@ -41,15 +45,15 @@ function isOlderThanDays(entry: DiaryEntry, now: Date, days: number) {
   return now.getTime() - timestamp >= days * 24 * 60 * 60 * 1000;
 }
 
-function findSeasonalEntry(entries: DiaryEntry[], now: Date, usedIds: Set<number>) {
+function findSeasonalEntry(candidates: RecommendationCandidate[], now: Date, usedKeys: Set<string>) {
   const targetMonth = now.getMonth();
 
-  return entries.find((entry) => {
-    if (!entry.id || usedIds.has(entry.id) || !isOlderThanDays(entry, now, 45)) {
+  return candidates.find(({ entry, key }) => {
+    if (usedKeys.has(key) || !isOlderThanDays(entry, now, 45)) {
       return false;
     }
 
-    const timestamp = getEntryTimestamp(entry);
+    const timestamp = getEntryTimestamp(entry.created_at);
     if (timestamp === null) {
       return false;
     }
@@ -58,17 +62,12 @@ function findSeasonalEntry(entries: DiaryEntry[], now: Date, usedIds: Set<number
   });
 }
 
-function findTagEntry(entries: DiaryEntry[], usedIds: Set<number>) {
+function findTagEntry(candidates: RecommendationCandidate[], usedKeys: Set<string>) {
   const tagCounts = new Map<string, number>();
 
-  entries.forEach((entry) => {
-    entry.tags?.forEach((tag) => {
-      const normalizedTag = tag.trim();
-      if (!normalizedTag) {
-        return;
-      }
-
-      tagCounts.set(normalizedTag, (tagCounts.get(normalizedTag) ?? 0) + 1);
+  candidates.forEach(({ entry }) => {
+    sanitizeEntryTags(entry.tags).forEach((tag) => {
+      tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
     });
   });
 
@@ -77,28 +76,36 @@ function findTagEntry(entries: DiaryEntry[], usedIds: Set<number>) {
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], 'zh-CN'));
 
   for (const [tag, count] of rankedTags) {
-    const matchingEntry = entries.find((entry) => entry.id && !usedIds.has(entry.id) && entry.tags?.includes(tag));
-    if (matchingEntry) {
-      return { entry: matchingEntry, tag, count };
+    const matchingCandidate = candidates.find(({ entry, key }) => !usedKeys.has(key) && sanitizeEntryTags(entry.tags).includes(tag));
+    if (matchingCandidate) {
+      return { candidate: matchingCandidate, tag, count };
     }
   }
 
   return null;
 }
 
-function findSceneEntry(entries: DiaryEntry[], usedIds: Set<number>) {
-  return entries.find((entry) => {
-    if (!entry.id || usedIds.has(entry.id)) {
+function findSceneEntry(candidates: RecommendationCandidate[], usedKeys: Set<string>) {
+  return candidates.find(({ entry, key }) => {
+    if (usedKeys.has(key)) {
       return false;
     }
 
-    return Boolean(entry.images?.length) || Boolean(entry.location) || entry.content.length >= 220;
+    return hasRenderableImages(entry) || hasRenderableLocation(entry) || sanitizeEntryContent(entry.content).length >= 220;
   });
 }
 
-function buildRecentRecommendation(entry: DiaryEntry): EntryRecommendation {
+function hasRenderableImages(entry: DiaryEntry): boolean {
+  return Array.isArray(entry.images) && entry.images.some(isValidImageSource);
+}
+
+function hasRenderableLocation(entry: DiaryEntry): boolean {
+  return Boolean(entry.location && isValidLocationInfo(entry.location));
+}
+
+function buildRecentRecommendation({ entry, key }: RecommendationCandidate): EntryRecommendation {
   return {
-    id: `recent-${entry.id ?? 'entry'}`,
+    id: `recent-${key}`,
     label: '继续读',
     description: '离现在最近的一篇，适合顺着当前记录继续往下读。',
     actionLabel: '打开这篇',
@@ -106,9 +113,9 @@ function buildRecentRecommendation(entry: DiaryEntry): EntryRecommendation {
   };
 }
 
-function buildSeasonalRecommendation(entry: DiaryEntry): EntryRecommendation {
+function buildSeasonalRecommendation({ entry, key }: RecommendationCandidate): EntryRecommendation {
   return {
-    id: `seasonal-${entry.id ?? 'entry'}`,
+    id: `seasonal-${key}`,
     label: '此月回看',
     description: '和当前月份同季，适合做一轮轻量的时间回看。',
     actionLabel: '回看这页',
@@ -116,9 +123,9 @@ function buildSeasonalRecommendation(entry: DiaryEntry): EntryRecommendation {
   };
 }
 
-function buildTagRecommendation(entry: DiaryEntry, tag: string, count: number): EntryRecommendation {
+function buildTagRecommendation({ entry, key }: RecommendationCandidate, tag: string, count: number): EntryRecommendation {
   return {
-    id: `tag-${entry.id ?? 'entry'}-${tag}`,
+    id: `tag-${key}-${tag}`,
     label: '主题线索',
     description: `标签“${tag}”出现了 ${count} 次，这篇适合作为这一条主题线索的入口。`,
     actionLabel: '打开主题',
@@ -126,15 +133,15 @@ function buildTagRecommendation(entry: DiaryEntry, tag: string, count: number): 
   };
 }
 
-function buildSceneRecommendation(entry: DiaryEntry): EntryRecommendation {
-  const sceneLabel = entry.images?.length
+function buildSceneRecommendation({ entry, key }: RecommendationCandidate): EntryRecommendation {
+  const sceneLabel = hasRenderableImages(entry)
     ? '图片'
-    : entry.location
+    : hasRenderableLocation(entry)
       ? '地点'
       : '更完整的正文';
 
   return {
-    id: `scene-${entry.id ?? 'entry'}`,
+    id: `scene-${key}`,
     label: '场景回放',
     description: `这篇带有${sceneLabel}信息，回看时更容易找回当时的环境和状态。`,
     actionLabel: '查看原文',
@@ -142,11 +149,11 @@ function buildSceneRecommendation(entry: DiaryEntry): EntryRecommendation {
   };
 }
 
-function buildArchiveRecommendation(entry: DiaryEntry): EntryRecommendation {
-  const preview = truncateText(entry.content.replace(/\s+/g, ' ').trim(), 36);
+function buildArchiveRecommendation({ entry, key }: RecommendationCandidate): EntryRecommendation {
+  const preview = truncateText(sanitizeEntryContent(entry.content).replace(/\s+/g, ' ').trim(), 36);
 
   return {
-    id: `archive-${entry.id ?? 'entry'}`,
+    id: `archive-${key}`,
     label: '翻旧页',
     description: preview ? `这是一段更早的记录，从这里重新打开旧页会更自然。` : '从更早的一页重新开始，适合打断最近输入惯性。',
     actionLabel: '翻回这篇',
@@ -155,43 +162,47 @@ function buildArchiveRecommendation(entry: DiaryEntry): EntryRecommendation {
 }
 
 export function getEntryRecommendations(entries: DiaryEntry[], now = new Date()): EntryRecommendation[] {
-  const sortedEntries = sortEntries(entries);
-  if (sortedEntries.length < 2) {
+  const sortedCandidates = sortEntries(entries);
+  if (sortedCandidates.length < 2) {
     return [];
   }
 
   const recommendations: EntryRecommendation[] = [];
-  const usedIds = new Set<number>();
-  const pushRecommendation = (recommendation: EntryRecommendation | null) => {
-    if (!recommendation || !recommendation.entry.id || usedIds.has(recommendation.entry.id)) {
+  const usedKeys = new Set<string>();
+  const pushRecommendation = (recommendation: EntryRecommendation | null, key: string | null) => {
+    if (!recommendation || !key || usedKeys.has(key)) {
       return;
     }
 
-    usedIds.add(recommendation.entry.id);
+    usedKeys.add(key);
     recommendations.push(recommendation);
   };
 
-  pushRecommendation(buildRecentRecommendation(sortedEntries[0]));
+  const recentCandidate = sortedCandidates[0]!;
+  pushRecommendation(buildRecentRecommendation(recentCandidate), recentCandidate.key);
 
-  const seasonalEntry = findSeasonalEntry(sortedEntries, now, usedIds);
-  if (seasonalEntry) {
-    pushRecommendation(buildSeasonalRecommendation(seasonalEntry));
+  const seasonalCandidate = findSeasonalEntry(sortedCandidates, now, usedKeys);
+  if (seasonalCandidate) {
+    pushRecommendation(buildSeasonalRecommendation(seasonalCandidate), seasonalCandidate.key);
   }
 
-  const tagRecommendation = findTagEntry(sortedEntries, usedIds);
+  const tagRecommendation = findTagEntry(sortedCandidates, usedKeys);
   if (tagRecommendation) {
-    pushRecommendation(buildTagRecommendation(tagRecommendation.entry, tagRecommendation.tag, tagRecommendation.count));
+    pushRecommendation(
+      buildTagRecommendation(tagRecommendation.candidate, tagRecommendation.tag, tagRecommendation.count),
+      tagRecommendation.candidate.key
+    );
   }
 
-  const sceneEntry = findSceneEntry(sortedEntries, usedIds);
-  if (sceneEntry) {
-    pushRecommendation(buildSceneRecommendation(sceneEntry));
+  const sceneCandidate = findSceneEntry(sortedCandidates, usedKeys);
+  if (sceneCandidate) {
+    pushRecommendation(buildSceneRecommendation(sceneCandidate), sceneCandidate.key);
   }
 
   if (recommendations.length < 3) {
-    const olderEntry = [...sortedEntries].reverse().find((entry) => entry.id && !usedIds.has(entry.id));
-    if (olderEntry) {
-      pushRecommendation(buildArchiveRecommendation(olderEntry));
+    const olderCandidate = [...sortedCandidates].reverse().find(({ key }) => !usedKeys.has(key));
+    if (olderCandidate) {
+      pushRecommendation(buildArchiveRecommendation(olderCandidate), olderCandidate.key);
     }
   }
 

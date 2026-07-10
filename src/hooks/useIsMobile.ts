@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { addMediaQueryChangeListener } from '../utils/mediaQueryListeners.ts';
 
 export function useIsMobile(breakpoint = 768) {
   const [isMobile, setIsMobile] = useState(() => {
@@ -17,13 +18,7 @@ export function useIsMobile(breakpoint = 768) {
 
     checkMobile();
 
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', checkMobile);
-      return () => mediaQuery.removeEventListener('change', checkMobile);
-    }
-
-    mediaQuery.addListener(checkMobile);
-    return () => mediaQuery.removeListener(checkMobile);
+    return addMediaQueryChangeListener(mediaQuery, checkMobile);
   }, [breakpoint]);
 
   return isMobile;

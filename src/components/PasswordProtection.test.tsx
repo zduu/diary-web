@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiService } from '../services/api';
 import { renderWithTheme } from '../test/renderWithTheme';
 import { PasswordProtection } from './PasswordProtection';
+import { ThemeProvider } from './ThemeProvider';
 
 describe('PasswordProtection', () => {
   afterEach(() => {
@@ -27,6 +28,58 @@ describe('PasswordProtection', () => {
       expect(onAuthenticated).toHaveBeenCalledTimes(1);
     });
     expect(screen.queryByPlaceholderText('请输入访问密码')).not.toBeInTheDocument();
+  });
+
+  it('does not authenticate again only because the callback identity changes', async () => {
+    const firstCallback = vi.fn();
+    const secondCallback = vi.fn();
+    const { rerender } = renderWithTheme(
+      <PasswordProtection
+        onAuthenticated={firstCallback}
+        passwordSettings={{ enabled: false }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(firstCallback).toHaveBeenCalledTimes(1);
+    });
+
+    rerender(
+      <ThemeProvider>
+        <PasswordProtection
+          onAuthenticated={secondCallback}
+          passwordSettings={{ enabled: false }}
+        />
+      </ThemeProvider>
+    );
+
+    expect(firstCallback).toHaveBeenCalledTimes(1);
+    expect(secondCallback).not.toHaveBeenCalled();
+  });
+
+  it('uses the latest callback when password protection becomes disabled', async () => {
+    const firstCallback = vi.fn();
+    const secondCallback = vi.fn();
+    const { rerender } = renderWithTheme(
+      <PasswordProtection
+        onAuthenticated={firstCallback}
+        passwordSettings={{ enabled: true }}
+      />
+    );
+
+    rerender(
+      <ThemeProvider>
+        <PasswordProtection
+          onAuthenticated={secondCallback}
+          passwordSettings={{ enabled: false }}
+        />
+      </ThemeProvider>
+    );
+
+    await waitFor(() => {
+      expect(secondCallback).toHaveBeenCalledTimes(1);
+    });
+    expect(firstCallback).not.toHaveBeenCalled();
   });
 
   it('submits the password and authenticates on success', async () => {

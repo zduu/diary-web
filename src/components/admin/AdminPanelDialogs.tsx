@@ -138,7 +138,13 @@ export function AdminImportModeDialog({
   return (
     <ModalShell
       isOpen={true}
-      onClose={isSubmitting ? undefined : onClose}
+      onClose={() => {
+        // 提交期间拒绝关闭但保持 onClose 稳定，
+        // 避免返回键关闭栈在提交中途脱管（useModalBackClose 依赖 onClose 存在性）
+        if (!isSubmitting) {
+          onClose();
+        }
+      }}
       ariaLabelledby="admin-import-title"
       initialFocusRef={confirmButtonRef}
       zIndex={100001}

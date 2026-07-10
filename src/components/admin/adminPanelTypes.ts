@@ -85,7 +85,7 @@ export interface AdminEntriesSectionProps {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   filteredEntries: DiaryEntry[];
-  entryTimestampLabels: Record<number, string>;
+  entryTimestampLabels: Record<string, string>;
   theme: ThemeConfig;
   getTextColor: AdminTextColorGetter;
   getOperationState: AdminEntryOperationStateGetter;
@@ -125,7 +125,7 @@ export interface AdminAuthenticatedViewSettingsState extends AdminAuthenticatedS
 export interface AdminAuthenticatedEntriesState {
   searchQuery: string;
   filteredEntries: DiaryEntry[];
-  entryTimestampLabels: Record<number, string>;
+  entryTimestampLabels: Record<string, string>;
 }
 
 export interface AdminAuthenticatedActions {

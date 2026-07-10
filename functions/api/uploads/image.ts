@@ -1,4 +1,5 @@
 import type { ApiResponse } from '../../../src/types/index.ts';
+import { isValidBase64Payload } from '../../../src/utils/imageSourceValidation.ts';
 import type { Env } from '../_shared.ts';
 import {
   jsonResponse,
@@ -28,6 +29,7 @@ type CloudflareImagesConfig = {
   apiToken: string;
   deliveryUrl?: string;
   variant: string;
+  uploadTimeoutMs: number;
 };
 
 type UploadTarget =
@@ -47,11 +49,58 @@ type JsonImageUploadRequest = {
 };
 
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+const MAX_IMAGE_MULTIPART_BODY_BYTES = 12 * 1024 * 1024;
 const MAX_IMAGE_JSON_BODY_BYTES = 15 * 1024 * 1024;
+const DEFAULT_UPLOADED_FILE_READ_TIMEOUT_MS = 15000;
 const DEFAULT_IMAGE_VARIANT = 'public';
+const DEFAULT_CLOUDFLARE_IMAGES_UPLOAD_TIMEOUT_MS = 15000;
 const R2_IMAGE_KEY_PREFIX = 'diary';
 const DEFAULT_IMAGE_CONTENT_TYPE = 'application/octet-stream';
 const FALLBACK_UPLOAD_FIELD_NAMES = ['image', 'upload', 'imageFile', 'files'];
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'avif']);
+
+function resolvePositiveTimeout(value: string | undefined, fallbackMs: number) {
+  const timeoutMs = Number(value);
+
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return fallbackMs;
+  }
+
+  return timeoutMs;
+}
+
+function resolveCloudflareImagesUploadTimeout(value: string | undefined) {
+  return resolvePositiveTimeout(value, DEFAULT_CLOUDFLARE_IMAGES_UPLOAD_TIMEOUT_MS);
+}
+
+function resolveUploadedFileReadTimeout(value: string | undefined) {
+  return resolvePositiveTimeout(value, DEFAULT_UPLOADED_FILE_READ_TIMEOUT_MS);
+}
+
+function parseContentLength(value: string | null): number | null {
+  if (!value || !/^\d+$/.test(value.trim())) {
+    return null;
+  }
+
+  const contentLength = Number(value);
+  return Number.isSafeInteger(contentLength) ? contentLength : null;
+}
+
+function getRequestMediaType(value: string | null): string {
+  return value?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+}
+
+function rejectOversizedMultipartBody(request: Request): void {
+  const contentLength = parseContentLength(request.headers.get('Content-Length'));
+  if (contentLength == null || contentLength <= MAX_IMAGE_MULTIPART_BODY_BYTES) {
+    return;
+  }
+
+  throw Object.assign(
+    new Error(`图片上传请求体不能超过 ${Math.floor(MAX_IMAGE_MULTIPART_BODY_BYTES / (1024 * 1024))}MB`),
+    { status: 413 }
+  );
+}
 
 function getCloudflareImagesConfig(env: Env): CloudflareImagesConfig | null {
   const accountId = env.IMAGES_ACCOUNT_ID?.trim();
@@ -66,6 +115,7 @@ function getCloudflareImagesConfig(env: Env): CloudflareImagesConfig | null {
     apiToken,
     deliveryUrl: env.IMAGES_DELIVERY_URL?.trim(),
     variant: env.IMAGES_VARIANT?.trim() || DEFAULT_IMAGE_VARIANT,
+    uploadTimeoutMs: resolveCloudflareImagesUploadTimeout(env.IMAGES_UPLOAD_TIMEOUT_MS),
   };
 }
 
@@ -110,11 +160,11 @@ function resolveUploadedImageUrl(
 function sanitizeFileExtension(fileName: string, contentType: string) {
   const explicitExtension = fileName.split('.').pop()?.trim().toLowerCase();
 
-  if (explicitExtension && /^[a-z0-9]{1,10}$/.test(explicitExtension)) {
+  if (explicitExtension && ALLOWED_IMAGE_EXTENSIONS.has(explicitExtension)) {
     return explicitExtension;
   }
 
-  switch (contentType) {
+  switch (contentType.toLowerCase()) {
     case 'image/jpeg':
       return 'jpg';
     case 'image/png':
@@ -132,15 +182,43 @@ function sanitizeFileExtension(fileName: string, contentType: string) {
   }
 }
 
+function normalizeMediaType(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function isImageContentType(value: string) {
+  return normalizeMediaType(value).startsWith('image/');
+}
+
 function buildR2ImageKey(file: UploadedFile) {
   const extension = sanitizeFileExtension(file.name || '', file.type);
   return `${R2_IMAGE_KEY_PREFIX}/image-${Date.now()}-${crypto.randomUUID()}.${extension}`;
 }
 
-async function uploadToR2(bucket: R2Bucket, file: UploadedFile, request: Request): Promise<string> {
+async function readUploadedFileBuffer(file: UploadedFile, timeoutMs: number): Promise<ArrayBuffer> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error('图片读取超时，请重新选择文件后再试'));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([
+      file.arrayBuffer(),
+      timeoutPromise,
+    ]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+async function uploadToR2(bucket: R2Bucket, file: UploadedFile, request: Request, fileReadTimeoutMs: number): Promise<string> {
   const key = buildR2ImageKey(file);
-  const contentType = file.type || DEFAULT_IMAGE_CONTENT_TYPE;
-  const buffer = await file.arrayBuffer();
+  const contentType = file.type ? normalizeMediaType(file.type) : DEFAULT_IMAGE_CONTENT_TYPE;
+  const buffer = await readUploadedFileBuffer(file, fileReadTimeoutMs);
 
   await bucket.put(key, buffer, {
     httpMetadata: {
@@ -151,25 +229,46 @@ async function uploadToR2(bucket: R2Bucket, file: UploadedFile, request: Request
   return new URL(`/api/images/${encodeURIComponent(key)}`, request.url).toString();
 }
 
-async function uploadToCloudflareImages(file: UploadedFile, config: CloudflareImagesConfig): Promise<string> {
+async function uploadToCloudflareImages(
+  file: UploadedFile,
+  config: CloudflareImagesConfig,
+  fileReadTimeoutMs: number
+): Promise<string> {
   const canonicalFile = new File(
-    [await file.arrayBuffer()],
+    [await readUploadedFileBuffer(file, fileReadTimeoutMs)],
     file.name || `diary-image-${Date.now()}`,
-    { type: file.type || DEFAULT_IMAGE_CONTENT_TYPE }
+    { type: file.type ? normalizeMediaType(file.type) : DEFAULT_IMAGE_CONTENT_TYPE }
   );
   const uploadFormData = new FormData();
   uploadFormData.set('file', canonicalFile, canonicalFile.name);
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    abortController.abort();
+  }, config.uploadTimeoutMs);
 
-  const cloudflareResponse = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/images/v1`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${config.apiToken}`,
-      },
-      body: uploadFormData,
+  let cloudflareResponse: Response;
+
+  try {
+    cloudflareResponse = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${config.accountId}/images/v1`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.apiToken}`,
+        },
+        body: uploadFormData,
+        signal: abortController.signal,
+      }
+    );
+  } catch (error) {
+    if (abortController.signal.aborted) {
+      throw new Error('Cloudflare Images 上传超时，请稍后重试');
     }
-  );
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   let cloudflarePayload: CloudflareImageUploadResponse | null = null;
 
@@ -255,12 +354,22 @@ function createUploadedFileFromDataUrl(dataUrl: string, filename?: string): Uplo
   const match = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\r\n]+)$/i);
 
   if (!match) {
-    throw new Error('dataUrl 不是有效的 base64 图片');
+    throw Object.assign(new Error('dataUrl 不是有效的 base64 图片'), { status: 400 });
   }
 
-  const contentType = match[1] || DEFAULT_IMAGE_CONTENT_TYPE;
-  const base64Payload = match[2] || '';
-  const bytes = decodeBase64ToBytes(base64Payload.replace(/\s+/g, ''));
+  const contentType = normalizeMediaType(match[1] || DEFAULT_IMAGE_CONTENT_TYPE);
+  const base64Payload = (match[2] || '').replace(/\s+/g, '');
+  let bytes: Uint8Array;
+
+  if (!isValidBase64Payload(base64Payload)) {
+    throw Object.assign(new Error('dataUrl 不是有效的 base64 图片'), { status: 400 });
+  }
+
+  try {
+    bytes = decodeBase64ToBytes(base64Payload);
+  } catch {
+    throw Object.assign(new Error('dataUrl 不是有效的 base64 图片'), { status: 400 });
+  }
 
   return {
     name: filename?.trim() || `diary-image-${Date.now()}.${sanitizeFileExtension('', contentType)}`,
@@ -271,9 +380,10 @@ function createUploadedFileFromDataUrl(dataUrl: string, filename?: string): Uplo
 }
 
 async function readUploadedFile(request: Request): Promise<UploadedFile> {
-  const contentType = request.headers.get('Content-Type')?.toLowerCase() ?? '';
+  const mediaType = getRequestMediaType(request.headers.get('Content-Type'));
 
-  if (contentType.includes('multipart/form-data')) {
+  if (mediaType === 'multipart/form-data') {
+    rejectOversizedMultipartBody(request);
     const formData = await request.formData();
     const file = extractUploadedFile(formData);
 
@@ -284,7 +394,7 @@ async function readUploadedFile(request: Request): Promise<UploadedFile> {
     return file;
   }
 
-  if (contentType.includes('application/json')) {
+  if (mediaType === 'application/json') {
     const { data, error, status } = await parseJsonBody<JsonImageUploadRequest>(request, {
       requireObject: true,
       requireJsonContentType: true,
@@ -316,6 +426,7 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   }
 
   const uploadTarget = getUploadTarget(context.env);
+  const fileReadTimeoutMs = resolveUploadedFileReadTimeout(context.env.IMAGES_FILE_READ_TIMEOUT_MS);
 
   if (!uploadTarget) {
     return jsonResponse<ApiResponse>({
@@ -327,7 +438,7 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
   try {
     const file = await readUploadedFile(context.request);
 
-    if (!file.type.startsWith('image/')) {
+    if (!isImageContentType(file.type)) {
       return jsonResponse<ApiResponse>({
         success: false,
         error: '仅支持图片文件上传',
@@ -349,8 +460,8 @@ export const onRequestPost = async (context: { request: Request; env: Env }): Pr
     }
 
     const uploadedImageUrl = uploadTarget.kind === 'r2'
-      ? await uploadToR2(uploadTarget.bucket, file, context.request)
-      : await uploadToCloudflareImages(file, uploadTarget.config);
+      ? await uploadToR2(uploadTarget.bucket, file, context.request, fileReadTimeoutMs)
+      : await uploadToCloudflareImages(file, uploadTarget.config, fileReadTimeoutMs);
 
     return jsonResponse<UploadImageResponse>({
       success: true,

@@ -1,7 +1,8 @@
-const CACHE_NAME = 'diary-shell-v2';
+const CACHE_NAME = 'diary-shell-v3';
 const STATIC_ASSETS = [
   '/',
   '/manifest.webmanifest',
+  '/theme-init.js',
   '/favicon.svg',
   '/apple-touch-icon.png',
   '/icon-192.png',

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { useModalBackClose } from '../hooks/useModalBackClose';
 
 const FOCUSABLE_SELECTOR = [
   'button:not([disabled])',
@@ -53,6 +54,8 @@ export function ModalShell({
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const isMobile = useIsMobile();
+
+  useModalBackClose(isOpen, onClose);
 
   useEffect(() => {
     if (!isOpen) {

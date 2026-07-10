@@ -1,10 +1,19 @@
-import { useDeferredValue, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Calendar, Filter, Search, Tag, X } from 'lucide-react';
 import { useThemeContext } from './ThemeProvider';
 import type { DiaryEntry } from '../types/index.ts';
-import { sanitizeFilterMetaControls } from './filters/filterEntryMeta';
-import { normalizeTimeString } from '../utils/timeUtils.ts';
+import { formatMonthLabel, sanitizeFilterMetaControls } from './filters/filterEntryMeta';
+import {
+  sanitizeEntryContent,
+  sanitizeEntryHidden,
+  sanitizeEntryMood,
+  sanitizeEntryTags,
+  sanitizeEntryTitle,
+  sanitizeEntryWeather,
+} from '../utils/entryTextValidation.ts';
+import { parseTimeString } from '../utils/timeUtils.ts';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { getLocalStorageItem, setLocalStorageItem } from '../utils/browserStorage.ts';
 
 interface SearchBarProps {
   entries: DiaryEntry[];
@@ -134,11 +143,42 @@ function normalizeSuggestionValue(value: string) {
   return value.trim().toLowerCase();
 }
 
+function sanitizeRecentSearches(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const items: string[] = [];
+
+  for (const item of value) {
+    if (typeof item !== 'string') {
+      continue;
+    }
+
+    const trimmedItem = item.trim();
+    const normalizedItem = normalizeSuggestionValue(trimmedItem);
+
+    if (trimmedItem.length < 2 || seen.has(normalizedItem)) {
+      continue;
+    }
+
+    seen.add(normalizedItem);
+    items.push(trimmedItem);
+
+    if (items.length === MAX_RECENT_SEARCHES) {
+      break;
+    }
+  }
+
+  return items;
+}
+
 function collectTitleSuggestions(entries: DiaryEntry[]) {
   const titleSet = new Set<string>();
 
   entries.forEach((entry) => {
-    const title = entry.title?.trim();
+    const title = sanitizeEntryTitle(entry.title);
 
     if (!title || title === '无标题' || title.length < 2) {
       return;
@@ -152,10 +192,10 @@ function collectTitleSuggestions(entries: DiaryEntry[]) {
 
 function countSuggestionMatches(entries: DiaryEntry[], value: string, type: 'tag' | 'title') {
   if (type === 'tag') {
-    return entries.filter((entry) => entry.tags?.includes(value)).length;
+    return entries.filter((entry) => sanitizeEntryTags(entry.tags).includes(value)).length;
   }
 
-  return entries.filter((entry) => entry.title?.trim() === value).length;
+  return entries.filter((entry) => sanitizeEntryTitle(entry.title) === value).length;
 }
 
 function sortSuggestions(
@@ -315,7 +355,7 @@ function getSearchSummaryItems(query: string, filters: SearchFilters) {
   }
 
   if (filters.selectedMonth) {
-    items.push({ id: 'selectedMonth', label: `月份：${parseInt(filters.selectedMonth, 10)}月` });
+    items.push({ id: 'selectedMonth', label: `月份：${formatMonthLabel(filters.selectedMonth)}` });
   }
 
   return items;
@@ -344,6 +384,7 @@ export function SearchBar({
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [isSearchInputFocused, setIsSearchInputFocused] = useState(false);
   const [highlightedOptionIndex, setHighlightedOptionIndex] = useState(-1);
+  const blurTimeoutRef = useRef<number | null>(null);
   const deferredEntries = useDeferredValue(entries);
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const deferredSearchFilters = useDeferredValue(searchFilters);
@@ -398,7 +439,7 @@ export function SearchBar({
     const tagSuggestions: SearchSuggestionItem[] = [];
     const titleSuggestions: SearchSuggestionItem[] = [];
     const seen = new Set<string>();
-    const visibleEntries = deferredEntries.filter((entry) => isAdminAuthenticated || !entry.hidden);
+    const visibleEntries = deferredEntries.filter((entry) => isAdminAuthenticated || !sanitizeEntryHidden(entry.hidden));
 
     if (deferredSearchFilters.searchInTags) {
       effectiveFilterMeta.availableTags.forEach((tag) => {
@@ -512,7 +553,7 @@ export function SearchBar({
 
   const saveRecentSearches = (items: string[]) => {
     setRecentSearches(items);
-    localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(items));
+    setLocalStorageItem(RECENT_SEARCHES_KEY, JSON.stringify(items));
   };
 
   const pushRecentSearch = (value: string) => {
@@ -522,7 +563,11 @@ export function SearchBar({
       return;
     }
 
-    const nextItems = [trimmedValue, ...recentSearches.filter((item) => item !== trimmedValue)].slice(0, MAX_RECENT_SEARCHES);
+    const normalizedValue = normalizeSuggestionValue(trimmedValue);
+    const nextItems = [
+      trimmedValue,
+      ...recentSearches.filter((item) => normalizeSuggestionValue(item) !== normalizedValue),
+    ].slice(0, MAX_RECENT_SEARCHES);
     saveRecentSearches(nextItems);
   };
 
@@ -530,17 +575,43 @@ export function SearchBar({
     saveRecentSearches([]);
   };
 
+  const clearBlurTimeout = () => {
+    if (blurTimeoutRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(blurTimeoutRef.current);
+    blurTimeoutRef.current = null;
+  };
+
+  const handleSearchInputFocus = () => {
+    clearBlurTimeout();
+    setIsSearchInputFocused(true);
+  };
+
+  const handleSearchInputBlur = () => {
+    clearBlurTimeout();
+    blurTimeoutRef.current = window.setTimeout(() => {
+      blurTimeoutRef.current = null;
+      setIsSearchInputFocused(false);
+    }, 120);
+  };
+
+  useEffect(() => () => {
+    if (blurTimeoutRef.current !== null) {
+      window.clearTimeout(blurTimeoutRef.current);
+    }
+  }, []);
+
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(RECENT_SEARCHES_KEY);
+      const saved = getLocalStorageItem(RECENT_SEARCHES_KEY);
       if (!saved) {
         return;
       }
 
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) {
-        setRecentSearches(parsed.filter((item): item is string => typeof item === 'string').slice(0, MAX_RECENT_SEARCHES));
-      }
+      const parsed = JSON.parse(saved) as unknown;
+      setRecentSearches(sanitizeRecentSearches(parsed));
     } catch {
       setRecentSearches([]);
     }
@@ -620,43 +691,49 @@ export function SearchBar({
       }
 
       const results = deferredEntries.filter((entry) => {
-        if (!isAdminAuthenticated && entry.hidden) {
+        if (!isAdminAuthenticated && sanitizeEntryHidden(entry.hidden)) {
           return false;
         }
 
         let matchesText = !query;
 
         if (query) {
-          if (deferredSearchFilters.searchInTitle && entry.title?.toLowerCase().includes(query)) {
+          if (deferredSearchFilters.searchInTitle && sanitizeEntryTitle(entry.title).toLowerCase().includes(query)) {
             matchesText = true;
           }
-          if (deferredSearchFilters.searchInContent && entry.content.toLowerCase().includes(query)) {
+          if (deferredSearchFilters.searchInContent && sanitizeEntryContent(entry.content).toLowerCase().includes(query)) {
             matchesText = true;
           }
-          if (deferredSearchFilters.searchInTags && entry.tags?.some((tag) => tag.toLowerCase().includes(query))) {
+          const entryTags = sanitizeEntryTags(entry.tags);
+          if (deferredSearchFilters.searchInTags && entryTags.some((tag) => tag.toLowerCase().includes(query))) {
             matchesText = true;
           }
         }
 
         if (!matchesText) return false;
-        if (deferredSearchFilters.mood && entry.mood !== deferredSearchFilters.mood) return false;
-        if (deferredSearchFilters.weather && entry.weather !== deferredSearchFilters.weather) return false;
+        if (deferredSearchFilters.mood && sanitizeEntryMood(entry.mood) !== deferredSearchFilters.mood) return false;
+        if (deferredSearchFilters.weather && sanitizeEntryWeather(entry.weather) !== deferredSearchFilters.weather) return false;
 
         if (deferredSearchFilters.selectedTag) {
+          const entryTags = sanitizeEntryTags(entry.tags);
           if (deferredSearchFilters.selectedTag === '__no_tags__') {
-            if (entry.tags && entry.tags.length > 0) return false;
-          } else if (!entry.tags || !entry.tags.includes(deferredSearchFilters.selectedTag)) {
+            if (entryTags.length > 0) return false;
+          } else if (!entryTags.includes(deferredSearchFilters.selectedTag)) {
             return false;
           }
         }
 
-        const entryDate = new Date(normalizeTimeString(entry.created_at!));
+        const entryDate = parseTimeString(entry.created_at);
 
-        if (deferredSearchFilters.selectedYear && entryDate.getFullYear().toString() !== deferredSearchFilters.selectedYear) {
+        if (deferredSearchFilters.selectedYear && entryDate?.getFullYear().toString() !== deferredSearchFilters.selectedYear) {
           return false;
         }
 
         if (deferredSearchFilters.selectedMonth) {
+          if (!entryDate) {
+            return false;
+          }
+
           const entryMonth = (entryDate.getMonth() + 1).toString().padStart(2, '0');
           if (entryMonth !== deferredSearchFilters.selectedMonth) {
             return false;
@@ -664,6 +741,10 @@ export function SearchBar({
         }
 
         if (deferredSearchFilters.dateRange) {
+          if (!entryDate) {
+            return false;
+          }
+
           const now = new Date();
 
           switch (deferredSearchFilters.dateRange) {
@@ -783,8 +864,8 @@ export function SearchBar({
               enterKeyHint="search"
               spellCheck={false}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => setIsSearchInputFocused(true)}
-              onBlur={() => window.setTimeout(() => setIsSearchInputFocused(false), 120)}
+              onFocus={handleSearchInputFocus}
+              onBlur={handleSearchInputBlur}
               onKeyDown={handleSearchInputKeyDown}
               role="combobox"
               aria-expanded={shouldShowListbox}
@@ -1072,7 +1153,7 @@ export function SearchBar({
                     value={searchFilters.selectedMonth}
                     options={[
                       { value: '', label: '所有月份' },
-                      ...availableMonthsForYear.map((month) => ({ value: month, label: `${parseInt(month, 10)}月` })),
+                      ...availableMonthsForYear.map((month) => ({ value: month, label: formatMonthLabel(month) })),
                     ]}
                     onChange={(value) => setSearchFilters((prev) => ({ ...prev, selectedMonth: value }))}
                   />

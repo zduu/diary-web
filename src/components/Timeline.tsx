@@ -15,7 +15,9 @@ import { TimelineDateNavigator } from './timeline/TimelineDateNavigator';
 import { TimelineTimeDivider } from './timeline/TimelineTimeDivider';
 import { createTimelineItems } from './timeline/timelineItems';
 import { useActiveTimelineDateAnchor } from './timeline/useActiveTimelineDateAnchor';
+import { sanitizeEntryHidden } from '../utils/entryTextValidation.ts';
 import { getEntryRecommendations } from '../utils/recommendationUtils.ts';
+import { findDiaryEntryIndex } from '../utils/diaryEntryIdentity.ts';
 
 const ArchiveView = lazy(() =>
   import('./ArchiveView').then((module) => ({ default: module.ArchiveView }))
@@ -54,25 +56,29 @@ export function Timeline({
   const { theme } = useThemeContext();
   const { isAdminAuthenticated } = useAdminAuth();
   const isMobile = useIsMobile();
-  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<DiaryEntry | null>(null);
   const mutedSurfaceStyle = getMutedSurfaceStyle(theme);
   const pendingPulseStyle = getPendingPulseStyle(theme);
 
-  const visibleEntries = entries.filter((entry) => isAdminAuthenticated || !entry.hidden);
-  const previewEntry = previewIndex === null ? null : visibleEntries[previewIndex] ?? null;
+  const visibleEntries = entries.filter((entry) => isAdminAuthenticated || !sanitizeEntryHidden(entry.hidden));
   const timelineItems = useMemo(() => createTimelineItems(visibleEntries), [visibleEntries]);
+  const orderedVisibleEntries = useMemo(
+    () => timelineItems
+      .filter((item) => item.type === 'entry')
+      .map((item) => item.data),
+    [timelineItems]
+  );
+  const matchedPreviewIndex = findDiaryEntryIndex(orderedVisibleEntries, previewTarget);
+  const previewIndex = matchedPreviewIndex >= 0 ? matchedPreviewIndex : null;
+  const previewEntry = previewIndex === null ? null : orderedVisibleEntries[previewIndex] ?? null;
   const recommendations = useMemo(() => getEntryRecommendations(visibleEntries), [visibleEntries]);
   const dateItems = useMemo(
     () => timelineItems.filter((item) => item.type === 'date'),
     [timelineItems]
   );
   const activeDateAnchor = useActiveTimelineDateAnchor(dateItems, viewMode === 'card');
-  const previewIndexById = useMemo(
-    () => new Map(visibleEntries.map((entry, index) => [entry.id, index])),
-    [visibleEntries]
-  );
   const openPreview = (entry: DiaryEntry) => {
-    setPreviewIndex(previewIndexById.get(entry.id) ?? null);
+    setPreviewTarget(entry);
   };
   const recommendationSection = recommendationsEnabled && recommendations.length > 0 ? (
     <RecommendationsPanel
@@ -232,14 +238,22 @@ export function Timeline({
       <EntryPreviewModal
         entry={previewEntry}
         isOpen={previewEntry !== null}
-        onClose={() => setPreviewIndex(null)}
+        onClose={() => setPreviewTarget(null)}
         onEdit={onEdit}
         currentIndex={previewIndex}
-        totalCount={visibleEntries.length}
+        totalCount={orderedVisibleEntries.length}
         hasPrevious={previewIndex !== null && previewIndex > 0}
-        hasNext={previewIndex !== null && previewIndex < visibleEntries.length - 1}
-        onPrevious={() => setPreviewIndex((current) => (current === null ? current : Math.max(0, current - 1)))}
-        onNext={() => setPreviewIndex((current) => (current === null ? current : Math.min(visibleEntries.length - 1, current + 1)))}
+        hasNext={previewIndex !== null && previewIndex < orderedVisibleEntries.length - 1}
+        onPrevious={() => {
+          if (previewIndex !== null && previewIndex > 0) {
+            setPreviewTarget(orderedVisibleEntries[previewIndex - 1] ?? null);
+          }
+        }}
+        onNext={() => {
+          if (previewIndex !== null && previewIndex < orderedVisibleEntries.length - 1) {
+            setPreviewTarget(orderedVisibleEntries[previewIndex + 1] ?? null);
+          }
+        }}
       />
     </>
   );

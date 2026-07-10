@@ -1,4 +1,5 @@
 import type { LocationInfo } from '../../types/index.ts';
+import { isValidCoordinatePair } from '../../utils/geoCoordinates.ts';
 import { debugLog } from '../../utils/logger.ts';
 
 type DistrictRange = {
@@ -78,6 +79,13 @@ function isDistrictRange(value: string | DistrictRange): value is DistrictRange 
 
 export function createSmartOfflineLocation(lat: number, lng: number): LocationInfo {
   debugLog('创建智能离线位置信息:', lat, lng);
+
+  if (!isValidCoordinatePair(lat, lng)) {
+    return {
+      name: '未知位置',
+      address: '未知地址',
+    };
+  }
 
   let matchedLocation: OfflineLocationRecord | null = null;
   let matchedDistrict: string | DistrictRange | null = null;

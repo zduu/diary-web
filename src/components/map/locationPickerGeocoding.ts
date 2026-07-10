@@ -1,13 +1,64 @@
 import { LOCATION_CONFIG, getAmapRegeoUrl, isAmapConfigured } from '../../config/location';
 import type { LocationInfo } from '../../types/index.ts';
+import { isValidCoordinatePair } from '../../utils/geoCoordinates.ts';
 import { debugError, debugLog, debugWarn } from '../../utils/logger.ts';
+import type { AMapAddressComponent } from './amapTypes';
 import { createSmartOfflineLocation } from './locationPickerOffline';
+
+type GeocodeCallbackName = `geocodeCallback_${string}`;
+
+interface AMapWebRegeocode {
+  addressComponent?: AMapAddressComponent;
+  formatted_address?: string;
+}
+
+interface AMapWebRegeoResponse {
+  status?: string;
+  info?: string;
+  infocode?: string;
+  regeocode?: AMapWebRegeocode;
+}
+
+interface OsmAddress {
+  building?: string;
+  shop?: string;
+  amenity?: string;
+  house_number?: string;
+  road?: string;
+  neighbourhood?: string;
+  suburb?: string;
+  city?: string;
+  town?: string;
+  village?: string;
+  state?: string;
+  country?: string;
+}
+
+interface OsmReverseGeocodeResponse {
+  display_name?: string;
+  lat?: string;
+  lon?: string;
+  name?: string;
+  namedetails?: {
+    name?: string;
+  };
+  address?: OsmAddress;
+}
+
+declare global {
+  interface Window {
+    google?: {
+      maps?: unknown;
+    };
+    [key: GeocodeCallbackName]: ((data: OsmReverseGeocodeResponse) => void) | undefined;
+  }
+}
 
 function normalizeString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
-function getAmapLocationName(addressComponent: any, formattedAddress: string): string {
+function getAmapLocationName(addressComponent: AMapAddressComponent, formattedAddress: string): string {
   if (addressComponent.building?.name) return addressComponent.building.name;
   if (addressComponent.neighborhood?.name) return addressComponent.neighborhood.name;
   if (addressComponent.streetNumber?.street && addressComponent.streetNumber?.number) {
@@ -27,7 +78,7 @@ function getAmapLocationName(addressComponent: any, formattedAddress: string): s
   return '未知位置';
 }
 
-function getJsonpLocationName(data: any, address: any): string {
+function getJsonpLocationName(data: OsmReverseGeocodeResponse, address: OsmAddress): string {
   debugLog('选择位置名称，数据:', { data, address });
 
   if (data.display_name) {
@@ -48,14 +99,15 @@ function getJsonpLocationName(data: any, address: any): string {
   if (address.road) return address.road;
   if (address.neighbourhood) return address.neighbourhood;
   if (address.suburb) return address.suburb;
-  if (address.city || address.town || address.village) return address.city || address.town || address.village;
+  const locality = address.city || address.town || address.village;
+  if (locality) return locality;
 
   debugLog('无法确定位置名称，使用默认');
   return '未知位置';
 }
 
 async function tryBrowserGeocoding(_lat: number, _lng: number): Promise<LocationInfo | null> {
-  if (typeof window !== 'undefined' && 'google' in window && (window as any).google?.maps) {
+  if (typeof window !== 'undefined' && window.google?.maps) {
     return null;
   }
 
@@ -63,6 +115,11 @@ async function tryBrowserGeocoding(_lat: number, _lng: number): Promise<Location
 }
 
 export async function tryAmapGeocoding(lat: number, lng: number): Promise<LocationInfo | null> {
+  if (!isValidCoordinatePair(lat, lng)) {
+    debugWarn('高德地图地理编码坐标无效:', { lat, lng });
+    return null;
+  }
+
   try {
     if (!LOCATION_CONFIG.ENABLE_AMAP) {
       debugLog('高德地图API已禁用');
@@ -80,21 +137,24 @@ export async function tryAmapGeocoding(lat: number, lng: number): Promise<Locati
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), LOCATION_CONFIG.API_TIMEOUT);
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       throw new Error(`高德地图API响应错误: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as AMapWebRegeoResponse;
     debugLog('高德地图API响应:', data);
 
     if (data.status !== '1' || !data.regeocode) {
@@ -108,8 +168,8 @@ export async function tryAmapGeocoding(lat: number, lng: number): Promise<Locati
       throw new Error(`高德地图API返回错误: ${errorMsg}`);
     }
 
-    const addressComponent = data.regeocode.addressComponent;
-    const formattedAddress = data.regeocode.formatted_address;
+    const addressComponent = data.regeocode.addressComponent ?? {};
+    const formattedAddress = data.regeocode.formatted_address ?? '';
 
     return {
       name: getAmapLocationName(addressComponent, formattedAddress),
@@ -134,8 +194,13 @@ export async function tryAmapGeocoding(lat: number, lng: number): Promise<Locati
 }
 
 export async function tryJSONPGeocoding(lat: number, lng: number): Promise<LocationInfo | null> {
+  if (!isValidCoordinatePair(lat, lng)) {
+    debugWarn('OpenStreetMap JSONP坐标无效:', { lat, lng });
+    return null;
+  }
+
   return new Promise((resolve) => {
-    const callbackName = `geocodeCallback_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+    const callbackName: GeocodeCallbackName = `geocodeCallback_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
     const timeout = setTimeout(() => {
       cleanup();
       resolve(null);
@@ -143,11 +208,15 @@ export async function tryJSONPGeocoding(lat: number, lng: number): Promise<Locat
 
     const cleanup = () => {
       clearTimeout(timeout);
-      delete (window as any)[callbackName];
-      document.getElementById(callbackName)?.remove();
+      delete window[callbackName];
+      const script = document.getElementById(callbackName) as HTMLScriptElement | null;
+      if (script) {
+        script.onerror = null;
+        script.remove();
+      }
     };
 
-    (window as any)[callbackName] = (data: any) => {
+    window[callbackName] = (data) => {
       cleanup();
 
       try {
@@ -194,6 +263,11 @@ export async function tryJSONPGeocoding(lat: number, lng: number): Promise<Locat
 
 export async function getDetailedLocationInfo(lat: number, lng: number): Promise<LocationInfo> {
   debugLog('开始获取位置信息:', lat, lng);
+
+  if (!isValidCoordinatePair(lat, lng)) {
+    debugWarn('位置信息坐标无效，使用未知位置:', { lat, lng });
+    return createSmartOfflineLocation(lat, lng);
+  }
 
   try {
     const amapLocationInfo = await tryAmapGeocoding(lat, lng);

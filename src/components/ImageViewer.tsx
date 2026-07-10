@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { ModalShell } from './ModalShell';
+import { clampImageIndex, getRenderableEntryImages } from './entry/entryImages';
 
 interface ImageViewerProps {
   images: string[];
@@ -12,13 +13,14 @@ interface ImageViewerProps {
 }
 
 export function ImageViewer({ images, initialIndex, isOpen, onClose }: ImageViewerProps) {
+  const renderableImages = useMemo(() => getRenderableEntryImages(images), [images]);
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const isMobile = useIsMobile();
-  useBodyScrollLock(isOpen);
+  useBodyScrollLock(isOpen && renderableImages.length > 0);
 
   useEffect(() => {
-    setCurrentIndex(initialIndex);
-  }, [initialIndex]);
+    setCurrentIndex(clampImageIndex(initialIndex, renderableImages.length));
+  }, [initialIndex, renderableImages.length]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -29,26 +31,30 @@ export function ImageViewer({ images, initialIndex, isOpen, onClose }: ImageView
           onClose();
           break;
         case 'ArrowLeft':
-          setCurrentIndex(prev => prev > 0 ? prev - 1 : images.length - 1);
+          if (renderableImages.length === 0) return;
+          setCurrentIndex((prev) => prev > 0 ? prev - 1 : renderableImages.length - 1);
           break;
         case 'ArrowRight':
-          setCurrentIndex(prev => prev < images.length - 1 ? prev + 1 : 0);
+          if (renderableImages.length === 0) return;
+          setCurrentIndex((prev) => prev < renderableImages.length - 1 ? prev + 1 : 0);
           break;
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, images.length, onClose]);
+  }, [isOpen, onClose, renderableImages.length]);
 
-  if (!isOpen) return null;
+  if (!isOpen || renderableImages.length === 0) return null;
+
+  const displayIndex = clampImageIndex(currentIndex, renderableImages.length);
 
   const goToPrevious = () => {
-    setCurrentIndex(prev => prev > 0 ? prev - 1 : images.length - 1);
+    setCurrentIndex((prev) => prev > 0 ? prev - 1 : renderableImages.length - 1);
   };
 
   const goToNext = () => {
-    setCurrentIndex(prev => prev < images.length - 1 ? prev + 1 : 0);
+    setCurrentIndex((prev) => prev < renderableImages.length - 1 ? prev + 1 : 0);
   };
 
   return (
@@ -97,7 +103,7 @@ export function ImageViewer({ images, initialIndex, isOpen, onClose }: ImageView
         </button>
 
         {/* 左箭头 */}
-        {images.length > 1 && (
+        {renderableImages.length > 1 && (
           <button
             onClick={goToPrevious}
             className="absolute left-4 z-10 p-2 rounded-full bg-black bg-opacity-50 text-white hover:bg-opacity-70 transition-all duration-200"
@@ -108,7 +114,7 @@ export function ImageViewer({ images, initialIndex, isOpen, onClose }: ImageView
         )}
 
         {/* 右箭头 */}
-        {images.length > 1 && (
+        {renderableImages.length > 1 && (
           <button
             onClick={goToNext}
             className="absolute z-10 p-2 rounded-full bg-black bg-opacity-50 text-white hover:bg-opacity-70 transition-all duration-200"
@@ -120,20 +126,20 @@ export function ImageViewer({ images, initialIndex, isOpen, onClose }: ImageView
 
         {/* 图片 */}
         <img
-          src={images[currentIndex]}
-          alt={`图片 ${currentIndex + 1}`}
+          src={renderableImages[displayIndex]}
+          alt={`图片 ${displayIndex + 1}`}
           className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
           decoding="async"
           style={{ maxWidth: isMobile ? '100%' : '90vw', maxHeight: isMobile ? 'calc(100dvh - 120px)' : '90vh' }}
         />
 
         {/* 图片计数器 */}
-        {images.length > 1 && (
+        {renderableImages.length > 1 && (
           <div
             className="absolute left-1/2 transform -translate-x-1/2 px-3 py-1 rounded-full bg-black bg-opacity-50 text-white text-sm"
             style={{ bottom: isMobile ? 'max(12px, var(--safe-area-bottom))' : '16px' }}
           >
-            {currentIndex + 1} / {images.length}
+            {displayIndex + 1} / {renderableImages.length}
           </div>
         )}
       </div>

@@ -1,5 +1,7 @@
-export function createEntryPreview(content: string): string {
-  return content
+import { sanitizeEntryContent } from '../../utils/entryTextValidation.ts';
+
+export function createEntryPreview(content: unknown): string {
+  return sanitizeEntryContent(content)
     .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
     .replace(/[#>*`_-]/g, '')
@@ -8,7 +10,7 @@ export function createEntryPreview(content: string): string {
     .trim();
 }
 
-export function getEntryPreview(content: string, maxLength: number) {
+export function getEntryPreview(content: unknown, maxLength: number) {
   const preview = createEntryPreview(content);
 
   if (preview.length <= maxLength) {

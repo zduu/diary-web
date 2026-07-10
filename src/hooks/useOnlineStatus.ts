@@ -5,7 +5,7 @@ function detectOnlineStatus() {
     return true;
   }
 
-  return navigator.onLine;
+  return navigator.onLine !== false;
 }
 
 export function useOnlineStatus() {

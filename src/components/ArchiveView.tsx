@@ -14,10 +14,12 @@ import {
   useArchiveHighlightScroll,
 } from './archive/useArchiveViewState';
 import { useIsMobile } from '../hooks/useIsMobile';
-import {
+import type {
   ArchiveDisplayMode,
+  ArchiveGroup,
   ArchiveHeaderStyle,
 } from './archive/archiveTypes';
+import { findDiaryEntryIndex, getDiaryEntryKey } from '../utils/diaryEntryIdentity.ts';
 
 interface ArchiveViewProps {
   entries: DiaryEntry[];
@@ -32,18 +34,35 @@ const displayModeClasses: Record<ArchiveDisplayMode, string> = {
   timeline: 'space-y-4',
 };
 
+function flattenDisplayedArchiveEntries(groups: ArchiveGroup[]) {
+  return groups.flatMap((group) => {
+    if (group.subGroups && group.subGroups.length > 0) {
+      return group.subGroups.flatMap((subGroup) => subGroup.entries);
+    }
+
+    return group.entries;
+  });
+}
+
 export function ArchiveView({ entries, onEdit, highlightEntryId = null }: ArchiveViewProps) {
   const { theme } = useThemeContext();
   const { isAdminAuthenticated } = useAdminAuth();
   const [displayMode, setDisplayMode] = useState<ArchiveDisplayMode>('cards');
   const [headerStyle, setHeaderStyle] = useState<ArchiveHeaderStyle>('simple');
   const [useNaturalTime, setUseNaturalTime] = useState(true);
-  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [previewTarget, setPreviewTarget] = useState<DiaryEntry | null>(null);
   const isMobile = useIsMobile();
   const deferredEntries = useDeferredValue(entries);
 
-  const previewEntry = previewIndex === null ? null : deferredEntries[previewIndex] ?? null;
   const archiveGroups = useMemo(() => createArchiveGroups(deferredEntries, useNaturalTime), [deferredEntries, useNaturalTime]);
+  const orderedArchiveEntries = useMemo(() => flattenDisplayedArchiveEntries(archiveGroups), [archiveGroups]);
+  const matchedPreviewIndex = findDiaryEntryIndex(orderedArchiveEntries, previewTarget);
+  const previewIndex = matchedPreviewIndex >= 0 ? matchedPreviewIndex : null;
+  const previewEntry = previewIndex === null ? null : orderedArchiveEntries[previewIndex] ?? null;
+  const previewIndexByEntry = useMemo(
+    () => new Map(orderedArchiveEntries.map((entry, index) => [entry, index])),
+    [orderedArchiveEntries]
+  );
   const {
     allExpanded,
     expandedGroups,
@@ -66,23 +85,20 @@ export function ArchiveView({ entries, onEdit, highlightEntryId = null }: Archiv
     );
   }
 
-  const renderEntry = (entry: DiaryEntry) => {
-    const openPreview = (target: DiaryEntry) => {
-      setPreviewIndex(deferredEntries.findIndex((item) => item.id === target.id));
-    };
-
+  const renderEntry = (entry: DiaryEntry, index: number) => {
     const isHighlighted = highlightEntryId === entry.id;
+    const entryIndex = previewIndexByEntry.get(entry) ?? index;
 
     return (
       <ArchiveEntryRenderer
-        key={entry.id}
+        key={getDiaryEntryKey(entry, entryIndex)}
         entry={entry}
         displayMode={displayMode}
         theme={theme}
         isAdminAuthenticated={isAdminAuthenticated}
         isMobile={isMobile}
         onEdit={onEdit}
-        onPreview={openPreview}
+        onPreview={setPreviewTarget}
         isHighlighted={isHighlighted}
       />
     );
@@ -201,14 +217,22 @@ export function ArchiveView({ entries, onEdit, highlightEntryId = null }: Archiv
       <EntryPreviewModal
         entry={previewEntry}
         isOpen={previewEntry !== null}
-        onClose={() => setPreviewIndex(null)}
+        onClose={() => setPreviewTarget(null)}
         onEdit={onEdit}
         currentIndex={previewIndex}
-        totalCount={deferredEntries.length}
+        totalCount={orderedArchiveEntries.length}
         hasPrevious={previewIndex !== null && previewIndex > 0}
-        hasNext={previewIndex !== null && previewIndex < deferredEntries.length - 1}
-        onPrevious={() => setPreviewIndex((current) => (current === null ? current : Math.max(0, current - 1)))}
-        onNext={() => setPreviewIndex((current) => (current === null ? current : Math.min(deferredEntries.length - 1, current + 1)))}
+        hasNext={previewIndex !== null && previewIndex < orderedArchiveEntries.length - 1}
+        onPrevious={() => {
+          if (previewIndex !== null && previewIndex > 0) {
+            setPreviewTarget(orderedArchiveEntries[previewIndex - 1] ?? null);
+          }
+        }}
+        onNext={() => {
+          if (previewIndex !== null && previewIndex < orderedArchiveEntries.length - 1) {
+            setPreviewTarget(orderedArchiveEntries[previewIndex + 1] ?? null);
+          }
+        }}
       />
     </div>
   );

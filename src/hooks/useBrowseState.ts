@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 import type { DiaryEntry } from '../types/index.ts';
+import { sanitizeEntryHidden } from '../utils/entryTextValidation.ts';
 
 export type BrowseMode = 'search' | 'quick-filter';
 export type BrowseSummaryItem = { id: string; label: string };
@@ -164,13 +165,13 @@ export function useBrowseState(entries: DiaryEntry[], isAdminAuthenticated: bool
   }, [isAdminAuthenticated, resetQuickFilterBrowsing, resetSearchBrowsing]);
 
   const accessibleEntries = useMemo(
-    () => entries.filter((entry) => isAdminAuthenticated || !entry.hidden),
+    () => entries.filter((entry) => isAdminAuthenticated || !sanitizeEntryHidden(entry.hidden)),
     [entries, isAdminAuthenticated]
   );
 
   const displayEntries = useMemo(
     () => (searchResults || quickFilterResults || accessibleEntries)
-      .filter((entry) => isAdminAuthenticated || !entry.hidden),
+      .filter((entry) => isAdminAuthenticated || !sanitizeEntryHidden(entry.hidden)),
     [accessibleEntries, isAdminAuthenticated, quickFilterResults, searchResults]
   );
 

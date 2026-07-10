@@ -7,13 +7,16 @@ import type {
   SessionState,
 } from './apiTypes.ts';
 import { ApiModeStore } from './apiModeStore.ts';
-import type { DiarySyncStatus } from './entrySync.ts';
+import { normalizeDiaryEntry, type DiarySyncStatus } from './entrySync.ts';
 import { MockApiService } from './mockApiService.ts';
 import { PublicSettingsStore } from './publicSettingsStore.ts';
 import { ApiRequestError, RemoteApiClient } from './remoteApiClient.ts';
 import { withRetry, verifyDeletion, getConsistencyErrorMessage } from '../utils/d1Utils.ts';
+import { isPersistedDiaryEntryId } from '../utils/diaryEntryIdentity.ts';
+import { isValidImageSource } from '../utils/imageSourceValidation.ts';
 import { prepareImageForUpload } from '../utils/imageUploadCompression.ts';
 import { debugWarn } from '../utils/logger.ts';
+import { parseTimeString } from '../utils/timestampUtils.ts';
 
 function getViteEnvValue(key: 'MODE' | 'VITE_USE_MOCK_API' | 'VITE_ENABLE_DATA_MODE_SWITCH'): string | undefined {
   return import.meta.env?.[key];
@@ -78,6 +81,28 @@ const signedOutSession: SessionState = {
   isAdminAuthenticated: false,
 };
 
+const DIRECT_REMOTE_REQUEST_TIMEOUT_MS = 15_000;
+const FILE_TO_DATA_URL_TIMEOUT_MS = 15_000;
+
+const publicSettingsResponseFields = [
+  'passwordProtectionEnabled',
+  'readingDeskEnabled',
+  'quickFiltersEnabled',
+  'exportEnabled',
+  'archiveViewEnabled',
+  'welcomePageEnabled',
+  'recommendationsEnabled',
+  'browseStatusEnabled',
+  'deviceStatusEnabled',
+] as const satisfies readonly (keyof PublicSettingsResponse)[];
+
+const adminSettingsResponseFields = [
+  ...publicSettingsResponseFields,
+  'adminPasswordConfigured',
+  'appPasswordConfigured',
+  'syncAccessTokenConfigured',
+] as const satisfies readonly (keyof AdminSettingsResponse)[];
+
 function encodeBytesToBase64(bytes: Uint8Array) {
   let binary = '';
 
@@ -88,14 +113,68 @@ function encodeBytesToBase64(bytes: Uint8Array) {
   return btoa(binary);
 }
 
+async function readFileArrayBufferWithTimeout(file: File): Promise<ArrayBuffer> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error('图片读取超时，请重新选择文件后再试'));
+    }, FILE_TO_DATA_URL_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([
+      file.arrayBuffer(),
+      timeoutPromise,
+    ]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 async function convertFileToDataUrl(file: File): Promise<string> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const contentType = file.type || 'application/octet-stream';
+  const bytes = new Uint8Array(await readFileArrayBufferWithTimeout(file));
+  if (bytes.byteLength === 0) {
+    throw new Error('图片文件为空');
+  }
+
+  // 图片文件必须具有有效的 MIME 类型；回退到 image/png 而非 application/octet-stream
+  // 以确保生成的 data URL 通过 isValidImageSource 校验
+  const contentType = file.type && file.type.startsWith('image/') ? file.type : 'image/png';
   return `data:${contentType};base64,${encodeBytesToBase64(bytes)}`;
 }
 
+async function fetchDirectRemote(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMessage: string
+) {
+  const abortController = new AbortController();
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    abortController.abort();
+  }, DIRECT_REMOTE_REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: abortController.signal,
+    });
+  } catch (error) {
+    if (timedOut) {
+      throw new Error(timeoutMessage);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 function inferUploadStorage(url: string): ImageUploadStorage {
-  if (url.startsWith('data:image/')) {
+  if (url.toLowerCase().startsWith('data:image/')) {
     return 'embedded';
   }
 
@@ -107,18 +186,44 @@ function inferUploadStorage(url: string): ImageUploadStorage {
 }
 
 function normalizeRemoteSyncApiBaseUrl(rawBaseUrl: string): string {
-  const trimmedValue = rawBaseUrl.trim();
-  if (!trimmedValue) {
+  const normalizedBaseUrl = normalizeRemoteSyncBaseUrl(rawBaseUrl);
+  if (!normalizedBaseUrl) {
     throw new Error('请先填写同步地址');
   }
 
-  const normalizedBaseUrl = trimmedValue.replace(/\/+$/, '');
   return normalizedBaseUrl.endsWith('/api') ? normalizedBaseUrl : `${normalizedBaseUrl}/api`;
 }
 
 function normalizeRemoteSyncBaseUrl(rawBaseUrl: string): string {
   const trimmedValue = rawBaseUrl.trim();
-  return trimmedValue.replace(/\/+$/, '');
+  if (!trimmedValue) {
+    return '';
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(trimmedValue);
+  } catch {
+    throw new Error('同步地址必须是完整的 http(s) 地址');
+  }
+
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    throw new Error('同步地址仅支持 http 或 https');
+  }
+
+  if (parsedUrl.username || parsedUrl.password) {
+    throw new Error('同步地址不能包含用户名或密码');
+  }
+
+  parsedUrl.search = '';
+  parsedUrl.hash = '';
+  return parsedUrl.toString().replace(/\/+$/, '');
+}
+
+function assertPersistedEntryId(id: number): void {
+  if (!isPersistedDiaryEntryId(id)) {
+    throw new Error('日记 ID 无效');
+  }
 }
 
 async function parseApiEnvelope<T>(response: Response): Promise<ApiEnvelope<T> | null> {
@@ -127,6 +232,46 @@ async function parseApiEnvelope<T>(response: Response): Promise<ApiEnvelope<T> |
   } catch {
     return null;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getNonEmptyStringField(payload: unknown, key: 'error' | 'message'): string | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  const value = payload[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function getApiErrorMessage(payload: unknown, fallbackMessage: string): string {
+  const errorMessage = getNonEmptyStringField(payload, 'error');
+  if (errorMessage) {
+    return errorMessage;
+  }
+
+  return isRecord(payload) && payload.success === false
+    ? getNonEmptyStringField(payload, 'message') ?? fallbackMessage
+    : fallbackMessage;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isStringOrNull(value: unknown): value is string | null {
+  return typeof value === 'string' || value === null;
+}
+
+function isValidStatsTime(value: unknown): value is string | null {
+  return value === null || (typeof value === 'string' && parseTimeString(value) !== null);
 }
 
 export class ApiService {
@@ -173,8 +318,8 @@ export class ApiService {
   }
 
   private ensureSuccess<T>(response: ApiResponse<T>, fallbackMessage: string): T {
-    if (!response.success || response.data === undefined) {
-      throw new Error(response.error || fallbackMessage);
+    if (response.success !== true || response.data === undefined) {
+      throw new Error(getApiErrorMessage(response, fallbackMessage));
     }
 
     return response.data;
@@ -199,13 +344,234 @@ export class ApiService {
     return this.ensureSuccess(response, fallbackMessage);
   }
 
+  private normalizeRemoteSessionState(session: unknown, fallbackMessage: string): SessionState {
+    if (
+      !isRecord(session)
+      || typeof session.isAuthenticated !== 'boolean'
+      || typeof session.isAdminAuthenticated !== 'boolean'
+    ) {
+      throw new Error(fallbackMessage);
+    }
+
+    return {
+      isAuthenticated: session.isAuthenticated,
+      isAdminAuthenticated: session.isAdminAuthenticated,
+    };
+  }
+
+  private normalizeBooleanFieldRecord<T extends object>(
+    payload: unknown,
+    fields: readonly (keyof T)[],
+    fallbackMessage: string
+  ): T {
+    if (!isRecord(payload) || fields.some((field) => typeof payload[field as string] !== 'boolean')) {
+      throw new Error(fallbackMessage);
+    }
+
+    const normalized = {} as Partial<T>;
+    for (const field of fields) {
+      normalized[field] = payload[field as string] as T[keyof T];
+    }
+
+    return normalized as T;
+  }
+
+  private normalizeRemotePublicSettings(settings: unknown): PublicSettingsResponse {
+    return this.normalizeBooleanFieldRecord<PublicSettingsResponse>(
+      settings,
+      publicSettingsResponseFields,
+      '公开设置响应格式无效'
+    );
+  }
+
+  private normalizeRemoteAdminSettings(settings: unknown): AdminSettingsResponse {
+    return this.normalizeBooleanFieldRecord<AdminSettingsResponse>(
+      settings,
+      adminSettingsResponseFields,
+      '管理员设置响应格式无效'
+    );
+  }
+
+  private normalizeRemoteDiaryStats(stats: unknown): DiaryStats {
+    if (
+      !isRecord(stats)
+      || !isNonNegativeInteger(stats.consecutive_days)
+      || !isNonNegativeInteger(stats.total_days_with_entries)
+      || !isNonNegativeInteger(stats.total_entries)
+      || !isValidStatsTime(stats.latest_entry_date)
+      || !isValidStatsTime(stats.first_entry_date)
+      || !isValidStatsTime(stats.current_streak_start)
+    ) {
+      throw new Error('统计响应格式无效');
+    }
+
+    return {
+      consecutive_days: stats.consecutive_days,
+      total_days_with_entries: stats.total_days_with_entries,
+      total_entries: stats.total_entries,
+      latest_entry_date: stats.latest_entry_date,
+      first_entry_date: stats.first_entry_date,
+      current_streak_start: stats.current_streak_start,
+    };
+  }
+
+  private normalizeRemoteR2SelfCheckResult(result: unknown): R2SelfCheckResult {
+    if (
+      !isRecord(result)
+      || typeof result.bucketBindingPresent !== 'boolean'
+      || typeof result.canWrite !== 'boolean'
+      || typeof result.canRead !== 'boolean'
+      || typeof result.canDelete !== 'boolean'
+      || typeof result.readBackMatches !== 'boolean'
+      || !isStringOrNull(result.testedKey)
+      || typeof result.keyPrefix !== 'string'
+      || typeof result.message !== 'string'
+    ) {
+      throw new Error('R2 自检响应格式无效');
+    }
+
+    return {
+      bucketBindingPresent: result.bucketBindingPresent,
+      canWrite: result.canWrite,
+      canRead: result.canRead,
+      canDelete: result.canDelete,
+      readBackMatches: result.readBackMatches,
+      testedKey: result.testedKey,
+      keyPrefix: result.keyPrefix,
+      message: result.message,
+    };
+  }
+
+  private normalizeRemoteDiaryEntry(entry: unknown, fallbackMessage: string): DiaryEntry {
+    if (!isRecord(entry)) {
+      throw new Error(fallbackMessage);
+    }
+
+    return normalizeDiaryEntry(entry as unknown as DiaryEntry);
+  }
+
+  private normalizeOptionalRemoteDiaryEntry(entry: unknown, fallbackMessage: string): DiaryEntry | null {
+    if (entry === null || entry === undefined) {
+      return null;
+    }
+
+    return this.normalizeRemoteDiaryEntry(entry, fallbackMessage);
+  }
+
+  private normalizeRemoteDiaryEntries(entries: unknown, fallbackMessage: string): DiaryEntry[] {
+    if (!Array.isArray(entries)) {
+      throw new Error(fallbackMessage);
+    }
+
+    return entries.map((entry) => this.normalizeRemoteDiaryEntry(entry, fallbackMessage));
+  }
+
+  private normalizeRequiredRemoteSyncTimestamp(value: unknown, fallbackMessage: string): string {
+    if (!isNonEmptyString(value)) {
+      throw new Error(fallbackMessage);
+    }
+
+    const normalizedValue = value.trim();
+    if (parseTimeString(normalizedValue) === null) {
+      throw new Error(fallbackMessage);
+    }
+
+    return normalizedValue;
+  }
+
+  private normalizeOptionalRemoteSyncTimestamp(value: unknown, fallbackMessage: string): string | null {
+    if (value === undefined || value === null) {
+      return null;
+    }
+
+    return this.normalizeRequiredRemoteSyncTimestamp(value, fallbackMessage);
+  }
+
+  private normalizeRemoteSyncEntries(entries: unknown, fallbackMessage: string): DiaryEntry[] {
+    if (!Array.isArray(entries)) {
+      throw new Error(fallbackMessage);
+    }
+
+    return entries.map((entry) => {
+      if (!isRecord(entry) || !isNonEmptyString(entry.entry_uuid)) {
+        throw new Error(fallbackMessage);
+      }
+
+      return this.normalizeRemoteDiaryEntry({
+        ...entry,
+        entry_uuid: entry.entry_uuid.trim(),
+        created_at: this.normalizeRequiredRemoteSyncTimestamp(entry.created_at, fallbackMessage),
+        updated_at: this.normalizeRequiredRemoteSyncTimestamp(entry.updated_at, fallbackMessage),
+        deleted_at: this.normalizeOptionalRemoteSyncTimestamp(entry.deleted_at, fallbackMessage),
+      }, fallbackMessage);
+    });
+  }
+
+  private normalizeRemoteSyncPayload(payload: unknown, fallbackMessage: string): RemoteSyncPayload {
+    if (!isRecord(payload)) {
+      throw new Error(fallbackMessage);
+    }
+
+    const {
+      entries,
+      pushedCount,
+      deletedCount,
+      confirmedEntryUuids,
+      syncedAt,
+    } = payload;
+    const normalizedSyncedAt = isNonEmptyString(syncedAt) ? syncedAt.trim() : '';
+    let normalizedConfirmedEntryUuids: string[] | undefined;
+
+    if (confirmedEntryUuids !== undefined) {
+      if (!Array.isArray(confirmedEntryUuids)) {
+        throw new Error(fallbackMessage);
+      }
+
+      normalizedConfirmedEntryUuids = [];
+      for (const entryUuid of confirmedEntryUuids) {
+        if (!isNonEmptyString(entryUuid)) {
+          throw new Error(fallbackMessage);
+        }
+
+        normalizedConfirmedEntryUuids.push(entryUuid.trim());
+      }
+    }
+
+    if (
+      !Array.isArray(entries)
+      || !isNonNegativeInteger(pushedCount)
+      || !isNonNegativeInteger(deletedCount)
+      || !normalizedSyncedAt
+      || parseTimeString(normalizedSyncedAt) === null
+    ) {
+      throw new Error(fallbackMessage);
+    }
+
+    return {
+      entries: this.normalizeRemoteSyncEntries(entries, fallbackMessage),
+      pushedCount,
+      deletedCount,
+      confirmedEntryUuids: normalizedConfirmedEntryUuids,
+      syncedAt: normalizedSyncedAt,
+    };
+  }
+
+  private normalizeUploadedImageUrl(payload: unknown): string {
+    const url = isRecord(payload) ? payload.url : undefined;
+    if (!isValidImageSource(url)) {
+      throw new Error('图片上传响应无效');
+    }
+
+    return url;
+  }
+
   private async requestDirectRemoteSync(
     baseUrl: string,
     syncToken: string,
     entries: DiaryEntry[],
     lastSyncedAt?: string | null
   ): Promise<RemoteSyncPayload> {
-    const response = await fetch(`${normalizeRemoteSyncApiBaseUrl(baseUrl)}/sync`, {
+    const response = await fetchDirectRemote(`${normalizeRemoteSyncApiBaseUrl(baseUrl)}/sync`, {
       method: 'POST',
       credentials: 'omit',
       headers: {
@@ -216,23 +582,36 @@ export class ApiService {
         entries,
         lastSyncedAt: lastSyncedAt ?? undefined,
       }),
-    });
+    }, '同步请求超时，请稍后重试');
 
     const responsePayload = await parseApiEnvelope<RemoteSyncPayload>(response);
 
-    if (!response.ok || !responsePayload?.success || !responsePayload.data) {
-      throw new Error(responsePayload?.error || '同步失败');
+    if (!response.ok || responsePayload?.success !== true || responsePayload.data === undefined) {
+      throw new Error(getApiErrorMessage(responsePayload, '同步失败'));
     }
 
-    return responsePayload.data;
+    return this.normalizeRemoteSyncPayload(responsePayload.data, '同步响应格式无效');
   }
 
-  private normalizeSettingValue(value: string | boolean | undefined): string | null {
+  private normalizeSettingValue(value: string | boolean | null | undefined): string | null {
     if (typeof value === 'boolean') {
       return value ? 'true' : 'false';
     }
 
     return value ?? null;
+  }
+
+  private normalizeRemoteSettingValue(payload: unknown, key: string): string | null {
+    if (!isRecord(payload) || !(key in payload)) {
+      throw new Error('设置响应格式无效');
+    }
+
+    const value = payload[key];
+    if (value !== null && typeof value !== 'string' && typeof value !== 'boolean') {
+      throw new Error('设置响应格式无效');
+    }
+
+    return this.normalizeSettingValue(value);
   }
 
   private async mutateSetting(
@@ -252,6 +631,7 @@ export class ApiService {
       mock: () => this.emitResolvedSession(this.mockService.getSession()),
       remote: () => this.emitResolvedSession(
         this.requestRemoteData<SessionState>('/auth/session', '获取会话状态失败')
+          .then((session) => this.normalizeRemoteSessionState(session, '会话状态响应格式无效'))
       ),
     });
   }
@@ -263,7 +643,7 @@ export class ApiService {
         this.requestRemoteData<SessionState>('/auth/login', '应用登录失败', {
           method: 'POST',
           body: JSON.stringify({ scope: 'app', password }),
-        })
+        }).then((session) => this.normalizeRemoteSessionState(session, '登录响应格式无效'))
       ),
     });
   }
@@ -275,7 +655,7 @@ export class ApiService {
         this.requestRemoteData<SessionState>('/auth/login', '管理员登录失败', {
           method: 'POST',
           body: JSON.stringify({ scope: 'admin', password }),
-        })
+        }).then((session) => this.normalizeRemoteSessionState(session, '登录响应格式无效'))
       ),
     });
   }
@@ -288,8 +668,8 @@ export class ApiService {
           method: 'POST',
         });
 
-        if (!response.success) {
-          throw new Error(response.error || '退出登录失败');
+        if (response.success !== true) {
+          throw new Error(getApiErrorMessage(response, '退出登录失败'));
         }
       },
     });
@@ -300,16 +680,25 @@ export class ApiService {
   async getAllEntries(): Promise<DiaryEntry[]> {
     return this.runWithCurrentMode({
       mock: () => this.mockService.getAllEntries(),
-      remote: () => this.requestRemoteData<DiaryEntry[]>('/entries', '获取日记列表失败'),
+      remote: async () => this.normalizeRemoteDiaryEntries(
+        await this.requestRemoteData<DiaryEntry[]>('/entries', '获取日记列表失败'),
+        '日记列表响应格式无效'
+      ),
     });
   }
 
   async getEntry(id: number): Promise<DiaryEntry | null> {
+    assertPersistedEntryId(id);
+
     return this.runWithCurrentMode({
       mock: () => this.mockService.getEntry(id),
       remote: async () => {
         const response = await this.remoteClient.request<DiaryEntry>(`/entries/${id}`);
-        return response.data || null;
+        if (response.success !== true) {
+          throw new Error(getApiErrorMessage(response, '获取日记失败'));
+        }
+
+        return this.normalizeOptionalRemoteDiaryEntry(response.data, '日记响应格式无效');
       },
     });
   }
@@ -317,10 +706,13 @@ export class ApiService {
   async createEntry(entry: Omit<DiaryEntry, 'id' | 'created_at' | 'updated_at'>): Promise<DiaryEntry> {
     return this.runWithCurrentMode({
       mock: () => this.mockService.createEntry(entry),
-      remote: () => this.requestRemoteData<DiaryEntry>('/entries', '创建日记失败', {
-        method: 'POST',
-        body: JSON.stringify(entry),
-      }),
+      remote: async () => this.normalizeRemoteDiaryEntry(
+        await this.requestRemoteData<DiaryEntry>('/entries', '创建日记失败', {
+          method: 'POST',
+          body: JSON.stringify(entry),
+        }),
+        '创建日记响应格式无效'
+      ),
     });
   }
 
@@ -345,17 +737,17 @@ export class ApiService {
             body: formData,
           });
 
-          if (!payload.url) {
-            throw new Error('图片上传响应无效');
-          }
+          const uploadedUrl = this.normalizeUploadedImageUrl(payload);
 
           return {
-            url: payload.url,
-            storage: inferUploadStorage(payload.url),
+            url: uploadedUrl,
+            storage: inferUploadStorage(uploadedUrl),
           };
         } catch (multipartError) {
+          let dataUrl: string | null = null;
+
           try {
-            const dataUrl = await convertFileToDataUrl(preparedFile);
+            dataUrl = await convertFileToDataUrl(preparedFile);
             const payload = await this.requestRemoteData<{ url: string }>('/uploads/image', '图片上传失败', {
               method: 'POST',
               body: JSON.stringify({
@@ -364,18 +756,19 @@ export class ApiService {
               }),
             });
 
-            if (!payload.url) {
-              throw new Error('图片上传响应无效');
-            }
+            const uploadedUrl = this.normalizeUploadedImageUrl(payload);
 
             return {
-              url: payload.url,
-              storage: inferUploadStorage(payload.url),
+              url: uploadedUrl,
+              storage: inferUploadStorage(uploadedUrl),
               warning: multipartError instanceof Error ? multipartError.message : '文件表单上传失败，已改用 base64 上传',
             };
           } catch (jsonFallbackError) {
             debugWarn('远程图片上传失败，回退为内嵌 base64 图片:', jsonFallbackError);
-            const fallbackUrl = await convertFileToDataUrl(preparedFile);
+            if (!dataUrl) {
+              throw jsonFallbackError;
+            }
+
             const warningMessage = jsonFallbackError instanceof Error
               ? jsonFallbackError.message
               : multipartError instanceof Error
@@ -383,7 +776,7 @@ export class ApiService {
                 : '上传接口失败';
 
             return {
-              url: fallbackUrl,
+              url: dataUrl,
               storage: 'embedded',
               warning: warningMessage,
             };
@@ -410,21 +803,30 @@ export class ApiService {
         keyPrefix: 'diary/',
         message: '当前处于本地模式，未连接 Cloudflare R2',
       }),
-      remote: () => this.requestRemoteData<R2SelfCheckResult>('/diagnostics/r2', 'R2 自检失败'),
+      remote: async () => this.normalizeRemoteR2SelfCheckResult(
+        await this.requestRemoteData<R2SelfCheckResult>('/diagnostics/r2', 'R2 自检失败')
+      ),
     });
   }
 
   async updateEntry(id: number, entry: Partial<DiaryEntry>): Promise<DiaryEntry> {
+    assertPersistedEntryId(id);
+
     return this.runWithCurrentMode({
       mock: () => this.mockService.updateEntry(id, entry),
-      remote: () => this.requestRemoteData<DiaryEntry>(`/entries/${id}`, '更新日记失败', {
-        method: 'PUT',
-        body: JSON.stringify(entry),
-      }),
+      remote: async () => this.normalizeRemoteDiaryEntry(
+        await this.requestRemoteData<DiaryEntry>(`/entries/${id}`, '更新日记失败', {
+          method: 'PUT',
+          body: JSON.stringify(entry),
+        }),
+        '更新日记响应格式无效'
+      ),
     });
   }
 
   async toggleEntryVisibility(id: number): Promise<DiaryEntry> {
+    assertPersistedEntryId(id);
+
     return this.runWithCurrentMode({
       mock: async () => {
         const current = await this.mockService.getEntry(id);
@@ -434,13 +836,18 @@ export class ApiService {
 
         return this.mockService.updateEntry(id, { hidden: !current.hidden });
       },
-      remote: () => this.requestRemoteData<DiaryEntry>(`/entries/${id}/toggle-visibility`, '切换隐藏状态失败', {
-        method: 'POST',
-      }),
+      remote: async () => this.normalizeRemoteDiaryEntry(
+        await this.requestRemoteData<DiaryEntry>(`/entries/${id}/toggle-visibility`, '切换隐藏状态失败', {
+          method: 'POST',
+        }),
+        '切换隐藏状态响应格式无效'
+      ),
     });
   }
 
   async deleteEntry(id: number): Promise<void> {
+    assertPersistedEntryId(id);
+
     if (this.useMockService) {
       return this.mockService.deleteEntry(id);
     }
@@ -451,9 +858,9 @@ export class ApiService {
           method: 'DELETE',
         });
 
-        if (!response.success) {
-          throw new Error(response.error || '删除失败');
-        }
+          if (response.success !== true) {
+            throw new Error(getApiErrorMessage(response, '删除失败'));
+          }
       }, { maxRetries: 2, baseDelay: 100 });
 
       const isDeleted = await verifyDeletion(async () => {
@@ -477,20 +884,26 @@ export class ApiService {
   async batchImportEntries(entries: DiaryEntry[], options?: { overwrite?: boolean }): Promise<DiaryEntry[]> {
     return this.runWithCurrentMode({
       mock: () => this.mockService.batchImportEntries(entries, options),
-      remote: () => this.requestRemoteData<DiaryEntry[]>('/entries/batch', '批量导入失败', {
-        method: 'POST',
-        body: JSON.stringify({ entries, options }),
-      }),
+      remote: async () => this.normalizeRemoteDiaryEntries(
+        await this.requestRemoteData<DiaryEntry[]>('/entries/batch', '批量导入失败', {
+          method: 'POST',
+          body: JSON.stringify({ entries, options }),
+        }),
+        '批量导入响应格式无效'
+      ),
     });
   }
 
   async batchUpdateEntries(entries: DiaryEntry[]): Promise<DiaryEntry[]> {
     return this.runWithCurrentMode({
       mock: () => this.mockService.batchUpdateEntries(entries),
-      remote: () => this.requestRemoteData<DiaryEntry[]>('/entries/batch', '批量更新失败', {
-        method: 'PUT',
-        body: JSON.stringify({ entries }),
-      }),
+      remote: async () => this.normalizeRemoteDiaryEntries(
+        await this.requestRemoteData<DiaryEntry[]>('/entries/batch', '批量更新失败', {
+          method: 'PUT',
+          body: JSON.stringify({ entries }),
+        }),
+        '批量更新响应格式无效'
+      ),
     });
   }
 
@@ -513,7 +926,7 @@ export class ApiService {
     return this.publicSettingsStore.track(
       this.remoteClient.request<PublicSettingsResponse>('/settings')
         .then((response) => this.publicSettingsStore.remember(
-          this.ensureSuccess(response, '获取公开设置失败')
+          this.normalizeRemotePublicSettings(this.ensureSuccess(response, '获取公开设置失败'))
         ))
     );
   }
@@ -521,7 +934,9 @@ export class ApiService {
   async getAdminSettings(): Promise<AdminSettingsResponse> {
     return this.runWithCurrentMode({
       mock: () => this.mockService.getAdminSettings(),
-      remote: () => this.requestRemoteData<AdminSettingsResponse>('/settings/admin', '获取管理员设置失败'),
+      remote: async () => this.normalizeRemoteAdminSettings(
+        await this.requestRemoteData<AdminSettingsResponse>('/settings/admin', '获取管理员设置失败')
+      ),
     });
   }
 
@@ -529,8 +944,8 @@ export class ApiService {
     return this.runWithCurrentMode({
       mock: () => this.mockService.getSetting(key),
       remote: async () => {
-        const data = await this.requestRemoteData<Record<string, string | boolean>>(`/settings/${key}`, '获取设置失败');
-        return this.normalizeSettingValue(data[key]);
+        const data = await this.requestRemoteData<Record<string, string | boolean | null>>(`/settings/${key}`, '获取设置失败');
+        return this.normalizeRemoteSettingValue(data, key);
       },
     });
   }
@@ -545,8 +960,8 @@ export class ApiService {
             body: JSON.stringify({ value }),
           });
 
-          if (!response.success) {
-            throw new Error(response.error || '设置更新失败');
+          if (response.success !== true) {
+            throw new Error(getApiErrorMessage(response, '设置更新失败'));
           }
         },
       })
@@ -568,7 +983,7 @@ export class ApiService {
   }
 
   private async verifyRemoteAdminPassword(apiBaseUrl: string, adminPassword: string): Promise<void> {
-    const response = await fetch(`${apiBaseUrl}/auth/login`, {
+    const response = await fetchDirectRemote(`${apiBaseUrl}/auth/login`, {
       method: 'POST',
       credentials: 'omit',
       headers: {
@@ -578,11 +993,16 @@ export class ApiService {
         scope: 'admin',
         password: adminPassword,
       }),
-    });
+    }, '远程管理员验证超时，请稍后重试');
     const payload = await parseApiEnvelope<{ isAuthenticated: boolean; isAdminAuthenticated: boolean }>(response);
 
-    if (!response.ok || !payload?.success) {
-      throw new Error(payload?.error || '远程管理员验证失败');
+    if (!response.ok || payload?.success !== true) {
+      throw new Error(getApiErrorMessage(payload, '远程管理员验证失败'));
+    }
+
+    const session = this.normalizeRemoteSessionState(payload.data, '远程管理员验证响应格式无效');
+    if (!session.isAuthenticated || !session.isAdminAuthenticated) {
+      throw new Error('远程管理员验证失败');
     }
   }
 
@@ -633,15 +1053,15 @@ export class ApiService {
   }
 
   enableLocalMode(): void {
+    this.modeStore.enableLocalMode();
     this.useMockService = true;
     this.publicSettingsStore.clear();
-    this.modeStore.enableLocalMode();
   }
 
   enableRemoteMode(): void {
+    this.modeStore.enableRemoteMode();
     this.useMockService = false;
     this.publicSettingsStore.clear();
-    this.modeStore.enableRemoteMode();
   }
 
   getCurrentMode(): 'local' | 'remote' {
@@ -670,7 +1090,8 @@ export class ApiService {
           headers['X-API-Key'] = apiKey;
         }
 
-        return this.requestRemoteData<DiaryStats>('/stats', '获取统计信息失败', { headers });
+        return this.requestRemoteData<DiaryStats>('/stats', '获取统计信息失败', { headers })
+          .then((stats) => this.normalizeRemoteDiaryStats(stats));
       },
     });
   }
@@ -738,15 +1159,18 @@ export class ApiService {
       );
     } else {
       try {
-        payload = this.ensureSuccess(
-          await this.remoteClient.request<RemoteSyncPayload>('/sync', {
-            method: 'POST',
-            body: JSON.stringify({
-              entries: pendingEntries,
-              lastSyncedAt: localSyncStatus.lastSyncedAt ?? undefined,
+        payload = this.normalizeRemoteSyncPayload(
+          this.ensureSuccess(
+            await this.remoteClient.request<RemoteSyncPayload>('/sync', {
+              method: 'POST',
+              body: JSON.stringify({
+                entries: pendingEntries,
+                lastSyncedAt: localSyncStatus.lastSyncedAt ?? undefined,
+              }),
             }),
-          }),
-          '同步失败'
+            '同步失败'
+          ),
+          '同步响应格式无效'
         );
       } catch (error) {
         if (error instanceof ApiRequestError && error.status === 401) {
@@ -757,13 +1181,19 @@ export class ApiService {
       }
     }
 
-    await this.mockService.markLocalEntriesSynced(payload.confirmedEntryUuids ?? [], payload.syncedAt);
-    await this.mockService.applyIncrementalRemoteSync(payload.entries, payload.syncedAt);
+    const normalizedRemoteEntries = payload.entries;
+    await this.mockService.applyRemoteSyncResult(
+      pendingEntries,
+      payload.confirmedEntryUuids ?? [],
+      normalizedRemoteEntries,
+      payload.syncedAt
+    );
 
     return {
       ...payload,
+      entries: normalizedRemoteEntries,
       pendingCount: pendingEntries.length,
-      remoteCount: payload.entries.length,
+      remoteCount: normalizedRemoteEntries.length,
     };
   }
 }

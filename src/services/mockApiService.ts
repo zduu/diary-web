@@ -1,4 +1,3 @@
-import { Capacitor } from '@capacitor/core';
 import type { DiaryEntry, DiaryStats } from '../types/index.ts';
 import type {
   AdminAccessProfile,
@@ -14,6 +13,7 @@ import {
   isPublicBooleanSettingKey,
 } from './publicSettingsSchema.ts';
 import {
+  applyDiarySyncResult,
   applyIncrementalRemoteEntries,
   buildDiarySyncStatus,
   createLocallyCreatedDiaryEntry,
@@ -25,9 +25,28 @@ import {
   normalizeDiaryEntry,
   type DiarySyncStatus,
 } from './entrySync.ts';
+import {
+  MAX_ENTRY_CONTENT_LENGTH,
+  MAX_ENTRY_MOOD_LENGTH,
+  MAX_ENTRY_TITLE_LENGTH,
+  MAX_ENTRY_WEATHER_LENGTH,
+  isValidEntryTags,
+  isWithinMaxLength,
+  sanitizeEntryHidden,
+} from '../utils/entryTextValidation.ts';
+import { getValidEntryDateRange, sortDiaryEntriesByTime } from '../utils/entryTime.ts';
+import { isValidImageSourceArray, MAX_ENTRY_IMAGE_DATA_URL_LENGTH } from '../utils/imageSourceValidation.ts';
+import { isRecord, isValidLocationInfo, parseEntriesBackupData } from '../utils/importUtils.ts';
+import { isNativeAppRuntime } from '../utils/nativePlatform.ts';
+import { parseTimeString } from '../utils/timestampUtils.ts';
 
 const DEFAULT_APP_TIME_ZONE = 'Asia/Shanghai';
 const LOCAL_PASSWORD_HASH_PREFIX = 'sha256';
+const MOCK_IMAGE_READ_TIMEOUT_MS = 15_000;
+// 本地模式图片以 data URL 形式入库：二进制上限由 data URL 字符上限反推
+// （base64 膨胀 4/3，预留 64 字符给 data:image/...;base64, 前缀），约 9MB
+const MOCK_IMAGE_MAX_BINARY_BYTES = Math.floor((MAX_ENTRY_IMAGE_DATA_URL_LENGTH - 64) / 4) * 3;
+const MOCK_IMAGE_MAX_SIZE_LABEL = `${Math.floor(MOCK_IMAGE_MAX_BINARY_BYTES / (1024 * 1024))}MB`;
 const textEncoder = new TextEncoder();
 
 function wait(ms: number) {
@@ -101,12 +120,8 @@ function formatDateKey(date: Date, timeZone: string): string {
 }
 
 function toDateKey(value: string | undefined, timeZone: string): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const date = parseTimeString(value);
+  if (!date) {
     return null;
   }
 
@@ -117,6 +132,105 @@ function shiftDateKey(dateKey: string, days: number): string {
   const date = new Date(`${dateKey}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().split('T')[0];
+}
+
+function normalizeMockEntryWriteInput(input: Partial<DiaryEntry>, requireContent: boolean): Partial<DiaryEntry> {
+  if (!isRecord(input)) {
+    throw new Error('日记数据格式无效');
+  }
+
+  const normalized: Partial<DiaryEntry> = {};
+
+  if (requireContent || input.title !== undefined) {
+    if (input.title !== undefined && typeof input.title !== 'string') {
+      throw new Error('标题必须是字符串');
+    }
+
+    const title = typeof input.title === 'string' ? input.title.trim() || '无标题' : '无标题';
+    if (!isWithinMaxLength(title, MAX_ENTRY_TITLE_LENGTH)) {
+      throw new Error(`标题长度不能超过 ${MAX_ENTRY_TITLE_LENGTH} 字符`);
+    }
+    normalized.title = title;
+  }
+
+  if (requireContent || input.content !== undefined) {
+    if (typeof input.content !== 'string') {
+      throw new Error('日记内容不能为空');
+    }
+
+    const content = input.content.trim();
+    if (!content) {
+      throw new Error('日记内容不能为空');
+    }
+
+    if (!isWithinMaxLength(content, MAX_ENTRY_CONTENT_LENGTH)) {
+      throw new Error(`内容长度不能超过 ${MAX_ENTRY_CONTENT_LENGTH} 字符`);
+    }
+    normalized.content = content;
+  }
+
+  if (requireContent || input.content_type !== undefined) {
+    if (input.content_type !== undefined && input.content_type !== 'markdown' && input.content_type !== 'plain') {
+      throw new Error('内容类型仅支持 markdown 或 plain');
+    }
+    normalized.content_type = input.content_type ?? 'markdown';
+  }
+
+  if (requireContent || input.mood !== undefined) {
+    if (input.mood !== undefined && typeof input.mood !== 'string') {
+      throw new Error('心情必须是字符串');
+    }
+
+    const mood = typeof input.mood === 'string' ? input.mood : 'neutral';
+    if (!isWithinMaxLength(mood, MAX_ENTRY_MOOD_LENGTH)) {
+      throw new Error(`心情长度不能超过 ${MAX_ENTRY_MOOD_LENGTH} 字符`);
+    }
+    normalized.mood = mood;
+  }
+
+  if (requireContent || input.weather !== undefined) {
+    if (input.weather !== undefined && typeof input.weather !== 'string') {
+      throw new Error('天气必须是字符串');
+    }
+
+    const weather = typeof input.weather === 'string' ? input.weather : 'unknown';
+    if (!isWithinMaxLength(weather, MAX_ENTRY_WEATHER_LENGTH)) {
+      throw new Error(`天气长度不能超过 ${MAX_ENTRY_WEATHER_LENGTH} 字符`);
+    }
+    normalized.weather = weather;
+  }
+
+  if (requireContent || input.images !== undefined) {
+    if (input.images !== undefined && !isValidImageSourceArray(input.images)) {
+      throw new Error('图片列表格式无效');
+    }
+    normalized.images = input.images ?? [];
+  }
+
+  if (requireContent || input.tags !== undefined) {
+    if (input.tags !== undefined && !isValidEntryTags(input.tags)) {
+      throw new Error('标签列表格式无效');
+    }
+    normalized.tags = input.tags ?? [];
+  }
+
+  if (requireContent || input.hidden !== undefined) {
+    if (input.hidden !== undefined && typeof input.hidden !== 'boolean') {
+      throw new Error('隐藏状态必须是布尔值');
+    }
+    normalized.hidden = input.hidden ?? false;
+  }
+
+  if (input.location !== undefined) {
+    if (!isValidLocationInfo(input.location)) {
+      throw new Error('位置信息格式无效');
+    }
+    normalized.location = input.location;
+  } else if (requireContent) {
+    normalized.location = null;
+  }
+
+  return normalized;
 }
 
 export class MockApiService {
@@ -133,13 +247,22 @@ export class MockApiService {
     adminAuth: this.ADMIN_AUTH_KEY,
     disableDefaults: 'diary_disable_defaults',
   });
+  private entryMutationQueue: Promise<void> = Promise.resolve();
 
-  private isNativeAppRuntime() {
-    if (typeof window === 'undefined') {
-      return false;
+  private async runEntryMutation<T>(action: () => Promise<T>): Promise<T> {
+    const previousMutation = this.entryMutationQueue;
+    let releaseMutation!: () => void;
+    this.entryMutationQueue = new Promise<void>((resolve) => {
+      releaseMutation = resolve;
+    });
+
+    await previousMutation;
+
+    try {
+      return await action();
+    } finally {
+      releaseMutation();
     }
-
-    return Capacitor.isNativePlatform() || window.location.protocol === 'capacitor:';
   }
 
   private async getStoredEntries(): Promise<DiaryEntry[]> {
@@ -165,7 +288,7 @@ export class MockApiService {
       await this.saveSettings(settings);
     }
 
-    if (this.isNativeAppRuntime()) {
+    if (isNativeAppRuntime()) {
       const remoteBound = this.getRemoteBoundState(settings);
       const configuredAdminPassword = this.getConfiguredLocalAdminPassword(settings);
 
@@ -223,7 +346,7 @@ export class MockApiService {
   }
 
   private async canReadEntry(entry: DiaryEntry): Promise<boolean> {
-    return (await this.isAdminAuthenticated()) || !entry.hidden;
+    return (await this.isAdminAuthenticated()) || !sanitizeEntryHidden(entry.hidden);
   }
 
   private async hasValidStatsApiKey(apiKey?: string): Promise<boolean> {
@@ -355,7 +478,7 @@ export class MockApiService {
 
   private getDefaultSettings(): Record<string, string> {
     return {
-      admin_password: this.isNativeAppRuntime() ? '' : 'admin123',
+      admin_password: isNativeAppRuntime() ? '' : 'admin123',
       app_password_enabled: 'false',
       app_password: 'diary123',
       login_background_enabled: 'false',
@@ -371,8 +494,7 @@ export class MockApiService {
     };
   }
 
-  private async generateId(): Promise<number> {
-    const entries = await this.getStoredEntries();
+  private generateId(entries: DiaryEntry[]): number {
     return Math.max(0, ...entries.map((entry) => entry.id || 0)) + 1;
   }
 
@@ -443,58 +565,112 @@ export class MockApiService {
   }
 
   async createEntry(entry: Omit<DiaryEntry, 'id' | 'created_at' | 'updated_at'>): Promise<DiaryEntry> {
-    return this.runMockRequest(100, async () => {
+    return this.runMockRequest(100, () => this.runEntryMutation(async () => {
       const entries = await this.getStoredEntries();
       const now = new Date().toISOString();
+      const normalizedInput = normalizeMockEntryWriteInput(entry, true);
       const newEntry: DiaryEntry = createLocallyCreatedDiaryEntry({
         ...entry,
-        id: await this.generateId(),
+        ...normalizedInput,
+        id: this.generateId(entries),
         created_at: now,
         updated_at: now,
-        content_type: entry.content_type || 'markdown',
-        mood: entry.mood || 'neutral',
-        weather: entry.weather || 'unknown',
-        tags: entry.tags || [],
-        images: entry.images || [],
-        location: entry.location || null,
-        hidden: entry.hidden || false,
       });
 
       entries.unshift(newEntry);
       await this.saveEntries(entries);
       return newEntry;
-    }, { requireAdmin: true });
+    }), { requireAdmin: true });
   }
 
   async uploadImage(file: File): Promise<string> {
     return this.runMockRequest(80, () => {
-      if (!file.type.startsWith('image/')) {
+      if (!file.type.toLowerCase().startsWith('image/')) {
         throw new Error('仅支持图片文件上传');
       }
 
-      if (file.size > 10 * 1024 * 1024) {
-        throw new Error('图片大小不能超过 10MB');
+      if (file.size <= 0) {
+        throw new Error('图片文件为空');
+      }
+
+      if (file.size > MOCK_IMAGE_MAX_BINARY_BYTES) {
+        throw new Error(`本地模式图片大小不能超过 ${MOCK_IMAGE_MAX_SIZE_LABEL}，请压缩后重试`);
       }
 
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => {
-          const result = typeof reader.result === 'string' ? reader.result : '';
-          if (!result) {
-            reject(new Error('图片读取失败'));
+        let settled = false;
+
+        const cleanup = () => {
+          clearTimeout(timeoutId);
+          reader.onload = null;
+          reader.onerror = null;
+          reader.onabort = null;
+        };
+
+        const settle = (callback: () => void) => {
+          if (settled) {
             return;
           }
 
-          resolve(result);
+          settled = true;
+          cleanup();
+          callback();
         };
-        reader.onerror = () => reject(new Error('图片读取失败'));
-        reader.readAsDataURL(file);
+
+        const timeoutId = setTimeout(() => {
+          settle(() => {
+            try {
+              if (reader.readyState === FileReader.LOADING) {
+                reader.abort();
+              }
+            } catch {
+              // Ignore abort failures; the caller already gets a timeout error.
+            }
+
+            reject(new Error('图片读取超时，请重新选择图片'));
+          });
+        }, MOCK_IMAGE_READ_TIMEOUT_MS);
+
+        reader.onload = () => {
+          settle(() => {
+            const result = typeof reader.result === 'string' ? reader.result : '';
+
+            // readAsDataURL 的输出结构固定，这里只做廉价的前缀与长度检查，
+            // 避免对多 MB 字符串做全量校验扫描（MIME 可能保留原始大小写）
+            if (result.slice(0, 11).toLowerCase() !== 'data:image/') {
+              reject(new Error('图片读取失败'));
+              return;
+            }
+
+            if (result.length > MAX_ENTRY_IMAGE_DATA_URL_LENGTH) {
+              reject(new Error(`本地模式图片大小不能超过 ${MOCK_IMAGE_MAX_SIZE_LABEL}，请压缩后重试`));
+              return;
+            }
+
+            resolve(result);
+          });
+        };
+
+        reader.onerror = () => {
+          settle(() => reject(new Error('图片读取失败')));
+        };
+
+        reader.onabort = () => {
+          settle(() => reject(new Error('图片读取已取消，请重新选择图片')));
+        };
+
+        try {
+          reader.readAsDataURL(file);
+        } catch {
+          settle(() => reject(new Error('图片读取失败')));
+        }
       });
     }, { requireAdmin: true });
   }
 
   async updateEntry(id: number, updates: Partial<DiaryEntry>): Promise<DiaryEntry> {
-    return this.runMockRequest(100, async () => {
+    return this.runMockRequest(100, () => this.runEntryMutation(async () => {
       const entries = await this.getStoredEntries();
       const index = entries.findIndex((entry) => entry.id === id);
 
@@ -502,19 +678,20 @@ export class MockApiService {
         throw new Error('日记不存在');
       }
 
+      const normalizedUpdates = normalizeMockEntryWriteInput(updates, false);
       const updatedEntry = markDiaryEntryUpdatedLocally(entries[index]!, {
-        ...updates,
+        ...normalizedUpdates,
         id,
       });
 
       entries[index] = updatedEntry;
       await this.saveEntries(entries);
       return updatedEntry;
-    }, { requireAdmin: true });
+    }), { requireAdmin: true });
   }
 
   async deleteEntry(id: number): Promise<void> {
-    return this.runMockRequest(100, async () => {
+    return this.runMockRequest(100, () => this.runEntryMutation(async () => {
       const entries = await this.getStoredEntries();
       const index = entries.findIndex((entry) => entry.id === id);
 
@@ -532,16 +709,17 @@ export class MockApiService {
 
       entries[index] = markDiaryEntryDeletedLocally(targetEntry);
       await this.saveEntries(entries);
-    }, { requireAdmin: true });
+    }), { requireAdmin: true });
   }
 
   async batchImportEntries(newEntries: DiaryEntry[], options?: { overwrite?: boolean }): Promise<DiaryEntry[]> {
-    return this.runMockRequest(200, async () => {
+    return this.runMockRequest(200, () => this.runEntryMutation(async () => {
+      const validEntries = parseEntriesBackupData(newEntries);
       const existingEntries = await this.getStoredEntries();
       const importedEntries: DiaryEntry[] = [];
       let nextId = Math.max(0, ...existingEntries.map((entry) => entry.id || 0)) + 1;
 
-      for (const entry of newEntries) {
+      for (const entry of validEntries) {
         const newEntry: DiaryEntry = normalizeDiaryEntry({
           ...entry,
           id: nextId++,
@@ -563,38 +741,61 @@ export class MockApiService {
         finalEntries = [...existingEntries, ...importedEntries];
       }
 
-      finalEntries.sort((left, right) =>
-        new Date(right.created_at || '').getTime() - new Date(left.created_at || '').getTime()
-      );
+      finalEntries = sortDiaryEntriesByTime(finalEntries);
 
       await this.saveEntries(finalEntries);
       return importedEntries;
-    }, { requireAdmin: true });
+    }), { requireAdmin: true });
   }
 
   async batchUpdateEntries(updatedEntries: DiaryEntry[]): Promise<DiaryEntry[]> {
-    return this.runMockRequest(200, async () => {
+    return this.runMockRequest(200, () => this.runEntryMutation(async () => {
+      const validEntries = parseEntriesBackupData(updatedEntries);
       const entries = await this.getStoredEntries();
+      const updates: Array<{ index: number; entry: DiaryEntry }> = [];
+      const seenIds = new Set<number>();
+
+      for (let index = 0; index < validEntries.length; index += 1) {
+        const updatedEntry = validEntries[index]!;
+        const id = updatedEntry.id;
+
+        if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
+          throw new Error(`第 ${index + 1} 条更新数据缺少有效 id`);
+        }
+
+        if (seenIds.has(id)) {
+          throw new Error(`批量更新中存在重复 id: ${id}`);
+        }
+        seenIds.add(id);
+
+        const entryIndex = entries.findIndex((entry) => entry.id === id && !isDiaryEntryDeleted(entry));
+        if (entryIndex === -1) {
+          throw new Error(`第 ${index + 1} 条更新目标不存在`);
+        }
+
+        updates.push({
+          index: entryIndex,
+          entry: updatedEntry,
+        });
+      }
+
       const results: DiaryEntry[] = [];
 
-      for (const updatedEntry of updatedEntries) {
-        const index = entries.findIndex((entry) => entry.id === updatedEntry.id);
-        if (index !== -1) {
-          const updated: DiaryEntry = normalizeDiaryEntry({
-            ...entries[index],
-            ...updatedEntry,
-            updated_at: updatedEntry.updated_at || new Date().toISOString(),
-            sync_state: updatedEntry.sync_state || 'synced',
-            last_synced_at: updatedEntry.last_synced_at ?? updatedEntry.updated_at ?? new Date().toISOString(),
-          });
-          entries[index] = updated;
-          results.push(updated);
-        }
+      for (const { index, entry: updatedEntry } of updates) {
+        const updated: DiaryEntry = normalizeDiaryEntry({
+          ...entries[index],
+          ...updatedEntry,
+          updated_at: updatedEntry.updated_at || new Date().toISOString(),
+          sync_state: updatedEntry.sync_state || 'synced',
+          last_synced_at: updatedEntry.last_synced_at ?? updatedEntry.updated_at ?? new Date().toISOString(),
+        });
+        entries[index] = updated;
+        results.push(updated);
       }
 
       await this.saveEntries(entries);
       return results;
-    }, { requireAdmin: true });
+    }), { requireAdmin: true });
   }
 
   async getSetting(key: string): Promise<string | null> {
@@ -631,7 +832,7 @@ export class MockApiService {
           throw new Error('当前已绑定远程，请先在线上修改管理员密码后再重新绑定');
         }
 
-        if (this.isNativeAppRuntime()) {
+        if (isNativeAppRuntime()) {
           throw new Error('APK 本地管理员口令默认为免密，请使用远程绑定来对齐管理员密码');
         }
 
@@ -756,22 +957,18 @@ export class MockApiService {
         throw new Error('需要管理员会话或有效的统计 API 密钥');
       }
 
-      const entries = (await this.getStoredEntries()).filter((entry) => !isDiaryEntryDeleted(entry) && (isAdminAuthenticated || hasApiKey || !entry.hidden));
+      const entries = (await this.getStoredEntries()).filter((entry) => !isDiaryEntryDeleted(entry) && (isAdminAuthenticated || hasApiKey || !sanitizeEntryHidden(entry.hidden)));
       const { consecutive_days, current_streak_start } = this.calculateConsecutiveDays(entries);
       const total_days_with_entries = this.calculateTotalDaysWithEntries(entries);
       const total_entries = entries.length;
-      const sortedEntries = [...entries].sort((left, right) =>
-        new Date(right.created_at || '').getTime() - new Date(left.created_at || '').getTime()
-      );
-      const latest_entry_date = sortedEntries.length > 0 ? sortedEntries[0].created_at || null : null;
-      const first_entry_date = sortedEntries.length > 0 ? sortedEntries[sortedEntries.length - 1].created_at || null : null;
+      const { latestEntryDate, firstEntryDate } = getValidEntryDateRange(entries);
 
       return {
         consecutive_days,
         total_days_with_entries,
         total_entries,
-        latest_entry_date,
-        first_entry_date,
+        latest_entry_date: latestEntryDate,
+        first_entry_date: firstEntryDate,
         current_streak_start,
       };
     });
@@ -790,15 +987,15 @@ export class MockApiService {
   }
 
   async markLocalEntriesSynced(entryUuids: string[], syncedAt?: string): Promise<void> {
-    return this.runMockRequest(30, async () => {
+    return this.runMockRequest(30, () => this.runEntryMutation(async () => {
       const entries = await this.getStoredEntries();
       const nextEntries = markDiaryEntriesSynced(entries, entryUuids, syncedAt);
       await this.saveEntries(nextEntries);
-    });
+    }));
   }
 
   async applyRemoteSyncSnapshot(entries: DiaryEntry[], syncedAt: string): Promise<void> {
-    return this.runMockRequest(30, async () => {
+    return this.runMockRequest(30, () => this.runEntryMutation(async () => {
       const normalizedEntries = entries.map((entry) => {
         const normalizedEntry = normalizeDiaryEntry(entry);
         return {
@@ -810,14 +1007,33 @@ export class MockApiService {
       });
 
       await this.saveEntries(normalizedEntries);
-    });
+    }));
   }
 
   async applyIncrementalRemoteSync(entries: DiaryEntry[], syncedAt: string): Promise<void> {
-    return this.runMockRequest(30, async () => {
+    return this.runMockRequest(30, () => this.runEntryMutation(async () => {
       const currentEntries = await this.getStoredEntries();
       await this.saveEntries(applyIncrementalRemoteEntries(currentEntries, entries, syncedAt));
-    });
+    }));
+  }
+
+  async applyRemoteSyncResult(
+    sentEntries: DiaryEntry[],
+    confirmedEntryUuids: string[],
+    remoteEntries: DiaryEntry[],
+    syncedAt: string
+  ): Promise<void> {
+    return this.runMockRequest(30, () => this.runEntryMutation(async () => {
+      const currentEntries = await this.getStoredEntries();
+      const nextEntries = applyDiarySyncResult(
+        currentEntries,
+        sentEntries,
+        confirmedEntryUuids,
+        remoteEntries,
+        syncedAt
+      );
+      await this.saveEntries(nextEntries);
+    }));
   }
 
   async getRemoteSyncConfig(): Promise<{ baseUrl: string; syncToken: string }> {
@@ -871,7 +1087,7 @@ export class MockApiService {
         delete settings.remote_sync_base_url;
         delete settings.remote_sync_token;
 
-        if (this.isNativeAppRuntime()) {
+        if (isNativeAppRuntime()) {
           delete settings.admin_password;
         }
       });

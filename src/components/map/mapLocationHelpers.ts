@@ -1,5 +1,7 @@
 import { wgs84ToGcj02 } from '../../utils/coordinateUtils.ts';
+import { isValidCoordinatePair } from '../../utils/geoCoordinates.ts';
 import { debugError, debugLog } from '../../utils/logger.ts';
+import { formatMeters } from '../../utils/numberFormat.ts';
 
 export function blurActiveInput(setHasInputFocus?: (focused: boolean) => void) {
   const activeElement = document.activeElement as HTMLElement | null;
@@ -39,6 +41,10 @@ export function getLocationErrorMessage(error: GeolocationPositionError, variant
 
 export function convertGeolocationPosition(position: GeolocationPosition) {
   const { latitude, longitude, accuracy } = position.coords;
+  if (!isValidCoordinatePair(latitude, longitude)) {
+    throw new Error('定位返回的坐标无效');
+  }
+
   const gcj02Result = wgs84ToGcj02(latitude, longitude);
   const location: [number, number] = [gcj02Result.longitude, gcj02Result.latitude];
 
@@ -62,6 +68,6 @@ export function logConvertedLocation(prefix: string, position: ReturnType<typeof
   debugLog(`${prefix} (坐标已转换):`);
   debugLog('  原始GPS坐标 (WGS84):', position.original);
   debugLog('  转换后坐标 (GCJ02):', position.converted);
-  debugLog('  坐标偏移距离:', `${position.gcj02Result.offset?.distance.toFixed(1)}米`);
-  debugLog('  GPS精度:', position.accuracy ? `${position.accuracy.toFixed(1)}米` : '未知');
+  debugLog('  坐标偏移距离:', formatMeters(position.gcj02Result.offset?.distance));
+  debugLog('  GPS精度:', formatMeters(position.accuracy));
 }
