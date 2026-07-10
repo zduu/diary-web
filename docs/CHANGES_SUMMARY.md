@@ -1,7 +1,7 @@
 # 最终改动总结
 
-> 生成日期：2026-07-10 | 分支：dev | 49 个提交 | 247 个文件 | +41,034 / −14,802 行
-> 更新：2026-07-10 — 补充两轮代码审查与 8 项缺陷修复记录
+> 生成日期：2026-07-10 | 分支：dev | 51 个提交 | 247 个文件 | +41,034 / −14,802 行
+> 更新：2026-07-10 — 补充两轮代码审查、9 项缺陷修复、APK 发布记录
 
 ---
 
@@ -225,6 +225,12 @@ npm run build → wrangler pages deploy dist
 | 7 | `src/components/PasswordProtection.tsx` | `passwordSettings.enabled` 为 false 时组件 return null 但不调用 onAuthenticated，依赖绑在 useEffect 上存在不稳定风险 | 🔴 |
 | 8 | `functions/api/stats.ts` | `getStatsTimeZone` 未验证时区有效性，无效时区在运行时抛异常导致统计接口 500 | 🟡 |
 
+### 第三轮修复（1 项，部署后紧急修复）
+
+| # | 文件 | 问题 | 严重程度 |
+|---|------|------|----------|
+| 9 | `functions/api/_shared.ts` | 模块顶层 `const DEVELOPMENT_SESSION_SECRET = crypto.randomUUID()` 在 Cloudflare Functions 全局作用域中执行了异步 I/O，导致部署时 Function 编译失败 | 🔴 |
+
 ### 第二轮发现但未修复（6 项，设计意图或极低风险）
 
 | # | 文件 | 问题 | 不修复原因 |
@@ -292,23 +298,42 @@ npm run build → wrangler pages deploy dist
 
 ## 七、本次部署说明（2026-07-10）
 
-本次仅追加 8 项代码缺陷修复，**不需要任何数据库变更、不需要 Dashboard 配置调整**。
+本次追加 9 项代码缺陷修复（含 1 项 Cloudflare Functions 部署兼容性修复），**不需要任何数据库变更、不需要 Dashboard 配置调整**。
 
-### 操作步骤
+### Web 部署
 
 ```bash
-git add -A
-git commit -m "fix: 修复 localStorage 静默丢失、session 可伪造等多处缺陷"
 git push origin dev
 ```
 
 Cloudflare Pages 检测到 push 后自动构建部署。
+
+### Android APK 发布
+
+本次修复中 `localDataStore`、`entrySync`、`PasswordProtection` 等改动直接影响 APK 本地模式体验，建议同步更新 APK。
+
+**发布步骤：**
+
+```bash
+# 1. 创建 APK tag（触发 GitHub Actions 自动构建）
+git tag apk-20260710-dev
+git push origin apk-20260710-dev
+```
+
+GitHub Actions 会自动执行 `build-android.yml`，构建 release APK 并挂到 GitHub Release。
 
 ### 不需要做的事
 
 - ❌ 不需要执行 migration（无 schema 变更）
 - ❌ 不需要配置新 secret（无新增环境变量）
 - ❌ 不需要 Dashboard 重新绑定（D1/R2 不变）
+
+### 本次提交记录
+
+| 提交 | 说明 |
+|------|------|
+| `0b10b7a` | 移除全局开发会话密钥，改为动态生成（修复 Cloudflare Functions 部署编译失败） |
+| `bba1e19` | 添加系统返回键适配与后端安全加固（含 8 项 bug 修复） |
 
 ---
 
