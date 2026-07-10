@@ -70,7 +70,6 @@ export type SessionInfo = {
 
 const textEncoder = new TextEncoder();
 const SESSION_COOKIE_NAME = 'diary_session';
-const DEVELOPMENT_SESSION_SECRET = crypto.randomUUID();
 const PASSWORD_HASH_PREFIX = 'pbkdf2';
 const PASSWORD_HASH_ITERATIONS = 100000;
 const MAX_SUPPORTED_PASSWORD_HASH_ITERATIONS = 100000;
@@ -195,7 +194,7 @@ function getSessionSecret(env: Env): string | null {
   }
 
   console.warn('SESSION_SECRET 与 ADMIN_BOOTSTRAP_PASSWORD 均未配置，使用随机生成的临时会话密钥。该密钥在 Worker 冷启动后会变化，已登录会话将失效。');
-  return DEVELOPMENT_SESSION_SECRET;
+  return crypto.randomUUID();
 }
 
 function requireSessionSecret(env: Env): string {
