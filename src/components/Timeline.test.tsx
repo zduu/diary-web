@@ -70,7 +70,7 @@ describe('Timeline recommendations', () => {
   it('keeps the recommendation block hidden when guests only have one readable entry', () => {
     renderTimeline([sampleEntries[0], sampleEntries[2]]);
 
-    expect(screen.queryByText('给你三条更轻的回看入口。')).not.toBeInTheDocument();
+    expect(screen.queryByText('轻回看入口')).not.toBeInTheDocument();
     expect(screen.getByText('公开的一篇')).toBeInTheDocument();
     expect(screen.queryByText('隐藏的一篇')).not.toBeInTheDocument();
   });
@@ -78,7 +78,7 @@ describe('Timeline recommendations', () => {
   it('shows the recommendation block when guests have multiple readable entries', () => {
     renderTimeline([sampleEntries[0], sampleEntries[1], sampleEntries[2]]);
 
-    expect(screen.getByText('给你三条更轻的回看入口。')).toBeInTheDocument();
+    expect(screen.getByText('轻回看入口')).toBeInTheDocument();
     expect(screen.queryByText('隐藏的一篇')).not.toBeInTheDocument();
   });
 

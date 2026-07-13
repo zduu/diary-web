@@ -32,19 +32,19 @@ export function AppHeader({
     ...shellSurfaceStyle,
     backgroundColor:
       theme.mode === 'dark'
-        ? 'rgba(10, 18, 28, 0.34)'
+        ? 'rgba(23, 33, 50, 0.55)'
         : theme.mode === 'paper'
           ? 'rgba(255, 253, 247, 0.52)'
           : 'rgba(255, 255, 255, 0.52)',
     border:
       theme.mode === 'dark'
-        ? '1px solid rgba(148, 163, 184, 0.18)'
+        ? '1px solid rgba(148, 163, 184, 0.16)'
         : theme.mode === 'paper'
           ? '1px solid rgba(217, 207, 191, 0.42)'
           : '1px solid rgba(229, 231, 235, 0.4)',
     boxShadow:
       theme.mode === 'dark'
-        ? '0 12px 28px rgba(4, 10, 18, 0.16)'
+        ? '0 12px 28px rgba(2, 6, 16, 0.32)'
         : '0 10px 24px rgba(15, 23, 42, 0.06)',
   };
   const quietButtonStyle = getQuietButtonStyle(theme);

@@ -135,7 +135,7 @@ body.theme-paper .primary-button {
 body.theme-dark {
   --color-primary: #60a5fa;
   --color-secondary: #94a3b8;
-  --color-background: #111827;
+  --color-background: #0b1120;
   --color-surface: #1f2937;
   --color-text: #f9fafb;
   --color-textSecondary: #94a3b8;
@@ -223,14 +223,14 @@ body.theme-dark {
 .theme-dark .diary-card,
 .theme-dark .location-detail-modal > div {
   background: #1f2937 !important;
-  border: 1px solid #374151 !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid #3a465c !important;
+  box-shadow: 0 18px 40px rgba(2, 6, 16, 0.5) !important;
 }
 
 .theme-dark .app-header {
-  background: rgba(10, 18, 28, 0.34) !important;
-  border: 1px solid rgba(148, 163, 184, 0.18) !important;
-  box-shadow: 0 12px 28px rgba(4, 10, 18, 0.16) !important;
+  background: rgba(23, 33, 50, 0.55) !important;
+  border: 1px solid rgba(148, 163, 184, 0.16) !important;
+  box-shadow: 0 12px 28px rgba(2, 6, 16, 0.32) !important;
 }
 
 .theme-dark .primary-button {

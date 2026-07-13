@@ -80,12 +80,12 @@ export function DiaryCard({ entry, onEdit, onPreview, searchQuery = '', isHighli
 
   const cardStyle: CSSProperties = {
     backgroundColor: theme.mode === 'dark' ? '#1f2937' : theme.colors.surface,
-    border: `1px solid ${isHighlighted ? theme.colors.primary : theme.colors.border}`,
+    border: `1px solid ${isHighlighted ? theme.colors.primary : theme.mode === 'dark' ? '#3a465c' : theme.colors.border}`,
     boxShadow:
       isHighlighted
         ? `0 0 0 2px ${theme.colors.primary}20, 0 4px 12px rgba(0, 0, 0, 0.1)`
         : theme.mode === 'dark'
-          ? '0 4px 12px rgba(0, 0, 0, 0.3)'
+          ? '0 18px 40px rgba(2, 6, 16, 0.5)'
           : '0 4px 12px rgba(0, 0, 0, 0.05)',
   };
   const handleImageClick = (index: number) => {

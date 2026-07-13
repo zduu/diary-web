@@ -11,7 +11,7 @@
   }
 
   try {
-    var background = mode === 'dark' ? '#111827' : mode === 'paper' ? '#f3eee2' : '#f9fafb';
+    var background = mode === 'dark' ? '#0b1120' : mode === 'paper' ? '#f3eee2' : '#f9fafb';
     var root = document.documentElement;
     root.classList.add('theme-' + mode);
     root.style.backgroundColor = background;

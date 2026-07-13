@@ -58,8 +58,8 @@ export function RecommendationsPanel({
         opacity: isPending ? 0.8 : 1,
       }}
     >
-      <div className={`flex ${isMobile ? 'flex-col gap-3' : 'items-end justify-between gap-4'}`}>
-        <div className="max-w-2xl">
+      <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 ${isMobile ? '' : 'justify-between'}`}>
+        <div className="flex items-center gap-2.5">
           <div
             className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs uppercase tracking-[0.18em]"
             style={{ ...mutedSurfaceStyle, color: theme.colors.primary }}
@@ -68,25 +68,19 @@ export function RecommendationsPanel({
             recommendations
           </div>
           <h2
-            className={`${isMobile ? 'mt-3 text-xl leading-tight' : 'mt-4 text-2xl'} font-semibold tracking-[-0.04em]`}
+            className={`${isMobile ? 'text-base' : 'text-lg'} font-semibold tracking-[-0.02em]`}
             style={{ color: theme.colors.text }}
           >
-            给你三条更轻的回看入口。
+            轻回看入口
           </h2>
-          <p
-            className={`${isMobile ? 'mt-2 text-sm leading-6' : 'mt-3 text-base leading-7'} max-w-xl`}
-            style={{ color: theme.colors.textSecondary }}
-          >
-            不再把推荐做成另一块重仪表盘，只保留适合当前时间线的几条阅读入口。
-          </p>
         </div>
 
-        <div
-          className={`rounded-[1.25rem] ${isMobile ? 'px-3 py-2 text-xs' : 'px-4 py-3 text-sm'}`}
-          style={insetSurfaceStyle}
+        <p
+          className={`${isMobile ? 'w-full text-xs leading-5' : 'text-sm'}`}
+          style={{ color: theme.colors.textSecondary }}
         >
-          {isPending ? '结果更新中，推荐会跟着当前列表调整。' : '推荐会随着最近内容、标签和旧页线索自动更新。'}
-        </div>
+          {isPending ? '结果更新中，推荐会跟着当前列表调整。' : '随最近内容、标签和旧页线索自动更新。'}
+        </p>
       </div>
 
       <div className={`mt-4 grid gap-3 ${isMobile ? 'grid-cols-1' : 'md:grid-cols-3'}`}>

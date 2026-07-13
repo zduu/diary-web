@@ -65,7 +65,7 @@ const themes: Record<ThemeMode, ThemeConfig> = {
     colors: {
       primary: '#60a5fa',
       secondary: '#94a3b8',
-      background: '#111827',
+      background: '#0b1120',
       surface: '#1f2937',
       text: '#f9fafb',
       textSecondary: '#94a3b8',
@@ -120,7 +120,7 @@ export function useTheme() {
     // public/theme-init.js 在首屏前设置了内联背景，这里保持它与当前主题一致
     root.style.backgroundColor = themeConfig.colors.background;
 
-    const themeColor = mode === 'dark' ? '#111827' : mode === 'paper' ? '#f3eee2' : '#f9fafb';
+    const themeColor = mode === 'dark' ? '#0b1120' : mode === 'paper' ? '#f3eee2' : '#f9fafb';
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor);
     syncSystemBarsWithTheme(mode === 'dark');
   };
